@@ -1,0 +1,71 @@
+name: PARRY CORE CI
+
+on:
+  push:
+    paths: ['game/**', '.github/workflows/game-ci.yml']
+  pull_request:
+    paths: ['game/**', '.github/workflows/game-ci.yml']
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: game
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: game/package-lock.json
+
+      - name: Install (from lockfile)
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=moderate
+
+      # These assert the security properties documented in docs/SECURITY.md.
+      # They are cheap, and they fail loudly if someone adds a network call or
+      # leaves the dev-only debug hook in a shipped build.
+      - name: Assert no dynamic code execution in source
+        run: |
+          if grep -rnE '\beval\(|new Function|innerHTML|outerHTML|document\.write|insertAdjacentHTML' src/; then
+            echo "::error::dynamic code execution or HTML injection found in src/"
+            exit 1
+          fi
+
+      - name: Assert the shipped bundle makes no network requests
+        run: |
+          if grep -nE 'fetch\(|XMLHttpRequest|WebSocket|sendBeacon|EventSource' dist/assets/*.js; then
+            echo "::error::a network API reached the production bundle"
+            exit 1
+          fi
+
+      - name: Assert the dev-only debug hook is stripped from production
+        run: |
+          if grep -n '__parry' dist/assets/*.js; then
+            echo "::error::dev-only debug hook leaked into the production bundle"
+            exit 1
+          fi
+
+      - name: Assert there are no runtime dependencies
+        run: |
+          deps=$(node -p "JSON.stringify(require('./package.json').dependencies || {})")
+          if [ "$deps" != "{}" ]; then
+            echo "::error::runtime dependencies added: $deps"
+            exit 1
+          fi

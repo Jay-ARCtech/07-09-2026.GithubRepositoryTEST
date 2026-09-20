@@ -1,0 +1,102 @@
+/*
+ * Chrome-free, full-bleed shell. Everything the player sees is drawn on the
+ * canvas; the DOM exists only to host it. That keeps the app from looking or
+ * behaving like a web page inside a wrapper (App Store guideline 4.2).
+ */
+:root {
+  --bg: #05060d;
+  --ink: #e8f0ff;
+  --accent: #4de2ff;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-monospace, "SF Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  overscroll-behavior: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+body {
+  position: fixed;
+  inset: 0;
+}
+
+#stage {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  outline: none;
+}
+
+#boot {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: var(--bg);
+  transition: opacity 320ms ease;
+  z-index: 10;
+}
+
+#boot.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#boot-mark {
+  width: 56px;
+  height: 56px;
+  border: 3px solid rgba(77, 226, 255, 0.25);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 900ms linear infinite;
+}
+
+#boot-text {
+  font-size: 13px;
+  letter-spacing: 0.42em;
+  color: rgba(232, 240, 255, 0.55);
+  text-indent: 0.42em;
+}
+
+.noscript {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  padding: 24px;
+  text-align: center;
+  background: var(--bg);
+  z-index: 20;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #boot-mark {
+    animation-duration: 2400ms;
+  }
+}

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<title>NOVA CORE PROTOCOL</title>
+<meta name="description" content="A bullet-heaven arena survival roguelite. Fully offline, no external assets." />
+<!-- Everything is self-contained: no CDN scripts, no remote fonts, no
+     external images/audio. The CSP below reflects that -- 'self' only,
+     no inline script execution, no eval. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='40' fill='%237dd3fc'/%3E%3Ccircle cx='50' cy='50' r='18' fill='%230b1220'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+  <canvas id="game-canvas"></canvas>
+  <div id="touch-zone" aria-hidden="true"></div>
+  <div id="vignette"></div>
+
+  <div id="hud" class="hidden">
+    <div id="boss-bar-wrap" class="hidden">
+      <div id="boss-name"></div>
+      <div class="bar boss-bar"><div id="boss-bar-fill" class="bar-fill"></div></div>
+    </div>
+    <div class="hud-top">
+      <div class="hud-left">
+        <div class="level-badge" id="hud-level">1</div>
+        <div class="bar hp-bar"><div id="hud-hp-fill" class="bar-fill"></div></div>
+        <div class="bar xp-bar"><div id="hud-xp-fill" class="bar-fill"></div></div>
+      </div>
+      <div class="hud-center" id="hud-timer">0:00</div>
+      <div class="hud-right">
+        <div id="hud-kills">☠ 0</div>
+        <div id="hud-cores">◈ 0</div>
+        <button id="btn-pause" class="icon-btn" aria-label="Pause">❙❙</button>
+      </div>
+    </div>
+    <div id="weapon-tray"></div>
+    <div id="toast-container"></div>
+  </div>
+
+  <div id="screen-menu" class="screen">
+    <div class="menu-bg-canvas-wrap"><canvas id="menu-canvas"></canvas></div>
+    <div class="menu-content">
+      <h1 class="title">NOVA CORE <span>PROTOCOL</span></h1>
+      <p class="subtitle">Survive the swarm. Evolve your arsenal. Break the cycle.</p>
+      <div class="menu-buttons">
+        <button class="btn btn-primary" data-action="play">Play</button>
+        <button class="btn" data-action="daily">Daily Challenge</button>
+        <button class="btn" data-action="armory">Armory</button>
+        <button class="btn" data-action="achievements">Achievements</button>
+        <button class="btn" data-action="settings">Settings</button>
+        <button class="btn hidden" id="btn-quit" data-action="quit">Quit</button>
+      </div>
+      <div class="menu-footer">v1.0.0 &middot; <span id="best-run-label"></span></div>
+    </div>
+  </div>
+
+  <div id="screen-charselect" class="screen hidden">
+    <h2>Choose Your Operative</h2>
+    <div id="char-list" class="card-grid"></div>
+    <div class="screen-actions">
+      <button class="btn" data-action="back-to-menu">Back</button>
+      <button class="btn btn-primary" id="btn-start-run" disabled>Deploy</button>
+    </div>
+  </div>
+
+  <div id="screen-pause" class="screen hidden">
+    <h2>Paused</h2>
+    <div class="menu-buttons">
+      <button class="btn btn-primary" data-action="resume">Resume</button>
+      <button class="btn" data-action="settings">Settings</button>
+      <button class="btn" data-action="quit-to-menu">Quit to Menu</button>
+    </div>
+  </div>
+
+  <div id="screen-levelup" class="screen hidden">
+    <h2 id="levelup-title">Level Up!</h2>
+    <div id="choice-list" class="card-grid"></div>
+    <div class="screen-actions" id="levelup-actions"></div>
+  </div>
+
+  <div id="screen-chest" class="screen hidden">
+    <h2>Supply Cache</h2>
+    <div id="chest-choice-list" class="card-grid"></div>
+  </div>
+
+  <div id="screen-gameover" class="screen hidden">
+    <h2 id="gameover-title">Run Ended</h2>
+    <div id="gameover-stats" class="stats-grid"></div>
+    <div class="screen-actions">
+      <button class="btn" data-action="back-to-menu">Menu</button>
+      <button class="btn" data-action="armory">Armory</button>
+      <button class="btn btn-primary" data-action="retry">Retry</button>
+    </div>
+  </div>
+
+  <div id="screen-settings" class="screen hidden">
+    <h2>Settings</h2>
+    <div id="settings-body" class="settings-body"></div>
+    <div class="screen-actions">
+      <button class="btn" data-action="back">Back</button>
+    </div>
+  </div>
+
+  <div id="screen-armory" class="screen hidden">
+    <h2>Armory <span id="armory-cores"></span></h2>
+    <div id="armory-body" class="card-grid"></div>
+    <div class="screen-actions">
+      <button class="btn" data-action="back-to-menu">Back</button>
+    </div>
+  </div>
+
+  <div id="screen-achievements" class="screen hidden">
+    <h2>Achievements</h2>
+    <div id="achievements-body" class="stats-grid"></div>
+    <div class="screen-actions">
+      <button class="btn" data-action="back-to-menu">Back</button>
+    </div>
+  </div>
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

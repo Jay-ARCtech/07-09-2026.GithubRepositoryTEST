@@ -1,4 +1,4 @@
-import { allocId, spawnBullet, clampToArena, findNearestHostile } from "./world.js";
+import { allocId, spawnBullet, clampToArena, findNearestHostile, isHostileFaction } from "./world.js";
 import { angleTo, TAU } from "../engine/utils.js";
 import { bus } from "../engine/bus.js";
 import { audio } from "../engine/audio.js";
@@ -100,11 +100,11 @@ export function updateBoss(e, world, dt, player) {
       if (e.telegraph.t <= 0) {
         const dmg = e.dmg * 1.6;
         const dd = Math.hypot(player.x - e.telegraph.x, player.y - e.telegraph.y);
-        if (player.faction !== e.faction && dd <= e.telegraph.radius) {
+        if (isHostileFaction(player.faction, e.faction) && dd <= e.telegraph.radius) {
           bus.emit("bossSlam", { x: e.telegraph.x, y: e.telegraph.y, dmg });
         }
         for (const o of world.enemies) {
-          if (!o.active || o === e || o.faction === e.faction) continue;
+          if (!o.active || o === e || !isHostileFaction(e.faction, o.faction)) continue;
           const od = Math.hypot(o.x - e.telegraph.x, o.y - e.telegraph.y);
           if (od <= e.telegraph.radius) {
             o.hp -= dmg;

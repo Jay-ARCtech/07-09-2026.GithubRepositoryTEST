@@ -43,16 +43,25 @@ export function createWorld(seedOverride = null, mode = "survival") {
   };
 }
 
+// Two factions are hostile only if one of them is "player" (the player and
+// every player-summoned ally share faction "player"). Non-player factions
+// -- "horde", and each War Mode empire's "empireN" -- are never hostile to
+// one another, so multiple empires never fight each other; they only ever
+// target the player and the player's allies.
+export function isHostileFaction(a, b) {
+  return a !== b && (a === "player" || b === "player");
+}
+
 // Faction-aware targeting shared by enemy AI, boss AI, and ally AI. Returns
-// the nearest active unit (the player, or any world.enemies entry) whose
-// faction differs from `unit.faction`, within maxRange. This one function
-// is what makes cross-faction combat (allies vs horde, empire vs empire in
-// War Mode, everything vs the player) fall out of a single code path
-// instead of needing bespoke AI per matchup.
+// the nearest active unit (the player, or any world.enemies entry) that is
+// hostile to `unit.faction` per isHostileFaction, within maxRange. This one
+// function is what makes cross-faction combat (allies vs horde, every
+// empire vs the player in War Mode) fall out of a single code path instead
+// of needing bespoke AI per matchup.
 export function findNearestHostile(world, unit, player, maxRange = Infinity) {
   let best = null;
   let bestD = maxRange * maxRange;
-  if (player && player.faction !== unit.faction && player.hp > 0) {
+  if (player && player.hp > 0 && isHostileFaction(unit.faction, player.faction)) {
     const d = (player.x - unit.x) ** 2 + (player.y - unit.y) ** 2;
     if (d < bestD) {
       bestD = d;
@@ -60,7 +69,7 @@ export function findNearestHostile(world, unit, player, maxRange = Infinity) {
     }
   }
   for (const o of world.enemies) {
-    if (o === unit || !o.active || o.faction === unit.faction) continue;
+    if (o === unit || !o.active || !isHostileFaction(unit.faction, o.faction)) continue;
     const d = (o.x - unit.x) ** 2 + (o.y - unit.y) ** 2;
     if (d < bestD) {
       bestD = d;

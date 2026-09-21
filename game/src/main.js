@@ -6,7 +6,7 @@ import { input } from "./engine/input.js";
 import { loadSave, writeSave, exportSaveString, importSaveString } from "./engine/save.js";
 import { bus } from "./engine/bus.js";
 
-import { createWorld, dailySeedToday, clampToArena } from "./game/world.js";
+import { createWorld, dailySeedToday, clampToArena, isHostileFaction } from "./game/world.js";
 import {
   createPlayer,
   recomputeStats,
@@ -580,7 +580,9 @@ function updateWeapons(dt) {
 // Every combat unit's own AI/movement runs first; contact damage is then
 // resolved in a second pass over fresh post-movement positions, faction by
 // faction, so the same code handles horde-vs-player, horde-vs-ally, and (in
-// War Mode) empire-vs-empire contact instead of a player-only special case.
+// War Mode) every empire-vs-player/ally contact instead of a player-only
+// special case. isHostileFaction keeps empires from ever contact-damaging
+// each other.
 function updateEnemiesAndContact(dt) {
   for (const e of world.enemies) {
     if (!e.active) continue;
@@ -600,7 +602,7 @@ function updateEnemiesAndContact(dt) {
     }
     if (!(e.dmg > 0)) continue;
 
-    if (e.faction !== player.faction) {
+    if (isHostileFaction(e.faction, player.faction)) {
       const dp = dist(e.x, e.y, player.x, player.y);
       if (dp < e.radius + player.radius) {
         e.contactCooldown = 0.5;
@@ -611,7 +613,7 @@ function updateEnemiesAndContact(dt) {
 
     const nearby = contactGrid.queryCircle(e.x, e.y, e.radius + 40);
     for (const o of nearby) {
-      if (o === e || !o.active || o.faction === e.faction) continue;
+      if (o === e || !o.active || !isHostileFaction(e.faction, o.faction)) continue;
       const dd = dist(e.x, e.y, o.x, o.y);
       if (dd < e.radius + o.radius) {
         e.contactCooldown = 0.5;
@@ -624,11 +626,12 @@ function updateEnemiesAndContact(dt) {
   }
 }
 
-// Collision resolves purely by faction comparison (b.sourceFaction vs the
-// candidate's .faction) rather than a hardcoded "player bullets hit
-// world.enemies, enemy bullets hit the player" split. That's what lets
-// ally-fired shots, horde shots, and War Mode's empire-vs-empire shots all
-// go through one path instead of three near-duplicate ones.
+// Collision resolves via isHostileFaction(b.sourceFaction, candidate.faction)
+// rather than a hardcoded "player bullets hit world.enemies, enemy bullets
+// hit the player" split. That's what lets ally-fired shots, horde shots, and
+// every War Mode empire's shots all go through one path instead of several
+// near-duplicate ones -- while still never letting one empire's bullets hit
+// another empire's units.
 function updateBullets(dt) {
   enemyGrid.clear();
   for (const e of world.enemies) if (e.active) enemyGrid.insert(e);
@@ -640,7 +643,7 @@ function updateBullets(dt) {
       let nearest = null,
         bestD = Infinity;
       for (const e of world.enemies) {
-        if (!e.active || e.faction === b.sourceFaction) continue;
+        if (!e.active || !isHostileFaction(b.sourceFaction, e.faction)) continue;
         const d = (e.x - b.x) ** 2 + (e.y - b.y) ** 2;
         if (d < bestD) {
           bestD = d;
@@ -667,7 +670,7 @@ function updateBullets(dt) {
       continue;
     }
 
-    if (player.faction !== b.sourceFaction && player.invuln <= 0 && dist(b.x, b.y, player.x, player.y) < b.radius + player.radius) {
+    if (isHostileFaction(b.sourceFaction, player.faction) && player.invuln <= 0 && dist(b.x, b.y, player.x, player.y) < b.radius + player.radius) {
       handlePlayerHit(b.dmg);
       b.active = false;
       continue;
@@ -675,7 +678,7 @@ function updateBullets(dt) {
 
     const candidates = enemyGrid.queryCircle(b.x, b.y, b.radius + 40);
     for (const e of candidates) {
-      if (!e.active || e.faction === b.sourceFaction || b._hitSet.has(e.id)) continue;
+      if (!e.active || !isHostileFaction(b.sourceFaction, e.faction) || b._hitSet.has(e.id)) continue;
       const rr = b.radius + e.radius;
       if ((b.x - e.x) ** 2 + (b.y - e.y) ** 2 > rr * rr) continue;
 
@@ -685,12 +688,12 @@ function updateBullets(dt) {
       if (b.aoeRadius > 0) {
         const aoeCandidates = enemyGrid.queryCircle(b.x, b.y, b.aoeRadius + 40);
         for (const e2 of aoeCandidates) {
-          if (!e2.active || e2 === e || e2.faction === b.sourceFaction) continue;
+          if (!e2.active || e2 === e || !isHostileFaction(b.sourceFaction, e2.faction)) continue;
           if ((b.x - e2.x) ** 2 + (b.y - e2.y) ** 2 <= b.aoeRadius * b.aoeRadius) {
             applyBulletDamage(e2, { ...b, dmg: b.dmg * 0.7, crit: false });
           }
         }
-        if (player.faction !== b.sourceFaction && player.invuln <= 0 && dist(b.x, b.y, player.x, player.y) <= b.aoeRadius) {
+        if (isHostileFaction(b.sourceFaction, player.faction) && player.invuln <= 0 && dist(b.x, b.y, player.x, player.y) <= b.aoeRadius) {
           handlePlayerHit(b.dmg * 0.7);
         }
         particles.spawnRing(b.x, b.y, "#fb923c", { size: b.aoeRadius, life: 0.35 });
@@ -1133,7 +1136,10 @@ startLoop((dt, now) => {
       weapons: player?.weapons?.map((w) => ({ id: w.id, level: w.level, extra: !!w._blades })),
       passiveCount: player?.passives?.length,
       ascensionLevel: meta.ascensionLevel,
-      empires: world?.empires?.map((emp) => ({ id: emp.id, alive: emp.alive })),
+      empires: world?.empires?.map((emp) => {
+        const boss = world.enemies.find((e) => e.id === emp.bossId);
+        return { id: emp.id, alive: emp.alive, bossHp: boss?.hp, bossMaxHp: boss?.maxHp, bossX: boss?.x, bossY: boss?.y };
+      }),
       allyDeadCount: world?.allyDeadCount ? { ...world.allyDeadCount } : null,
     };
   }

@@ -148,6 +148,34 @@ ceiling ("once I maxed everything, the game had nothing left to show me").
   eliminated within 32 seconds of a 4-empire match starting, well before
   the player alone could have killed it.
 
+## v1.2.0: All-Out War rebalance -- no infighting, scalable empire count
+
+Direct response to player feedback: empires fighting each other in v1.1.0
+diluted the threat (troops died to each other instead of pressuring the
+player) and the mode was locked to a fixed 2/3/4 choice.
+
+- **Empires no longer fight each other.** `isHostileFaction(a, b)` in
+  `world.js` replaces the old "any faction mismatch is hostile" rule with
+  "hostile only if one side is `player`" (the player and every ally share
+  faction `player`). Two different `empireN` factions are now never
+  hostile to one another -- every boss and every troop from every empire
+  exists to hunt the player and the player's allies, full stop. This is
+  the one function that both `findNearestHostile` and every bullet/contact
+  collision check in `main.js` and `bosses.js` go through, so the change
+  is centralized rather than scattered.
+- **Empire count is now a slider (`screen-warsetup`)**, 2-6 empires
+  (`MIN_EMPIRES`/`MAX_EMPIRES` in `warmode.js`), not three fixed cards.
+  Boss `hpScale`/`dmgScale` stay at their original v1.1.0 values through 4
+  empires, then taper (`0.55 * (4/n)` for HP, `0.85 * sqrt(4/n)` for
+  damage) past that -- total boss HP/damage budget holds roughly flat at
+  5-6 empires rather than compounding, so the difficulty spike comes from
+  *more simultaneous troop directors and fronts to manage* (now that
+  nothing thins them out for you), not from bosses becoming unkillable HP
+  bricks. A hard cap (`WAR_ENEMY_CAP = 240` on `world.enemies.length`)
+  stops the troop directors from spawning past that ceiling, so 6 empires
+  is a genuine nightmare without ever turning into an unplayable slideshow
+  or an unwinnable HP wall.
+
 ## Deliberately out of scope
 
 - Custom-drawn sprite art / hand-authored music (procedural instead, to

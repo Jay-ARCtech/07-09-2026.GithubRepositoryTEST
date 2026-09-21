@@ -1,9 +1,11 @@
-// All-Out War: up to 4 empires, each with its own boss and troops, spread
+// All-Out War: 2-6 empires, each with its own boss and troops, spread
 // around the arena. Empire troops target the nearest hostile unit via the
-// same findNearestHostile system enemies.js and bosses.js already use, so
-// "empires fight each other" isn't bespoke AI -- it falls straight out of
-// giving each empire its own faction tag and letting the existing combat
-// resolution (faction mismatch = hostile) run.
+// same findNearestHostile system enemies.js and bosses.js already use, but
+// isHostileFaction (world.js) treats two different "empireN" factions as
+// NOT hostile to each other -- every empire hunts only the player and the
+// player's allies. That's a deliberate design choice: with no infighting to
+// thin them out, every troop from every empire is a threat you personally
+// have to deal with, which is what makes higher empire counts brutal.
 import { spawnBoss, BOSS_TYPES } from "./bosses.js";
 import { spawnEnemy } from "./enemies.js";
 import { spawnChest, spawnOverdrive } from "./pickups.js";
@@ -11,9 +13,25 @@ import { TAU } from "../engine/utils.js";
 
 const BOSS_IDS = Object.keys(BOSS_TYPES);
 
+export const MIN_EMPIRES = 2;
+export const MAX_EMPIRES = 6;
+
+// Hard ceiling on world.enemies.length while War Mode's directors are
+// spawning troops. Bosses/allies aren't counted against it (they don't
+// come from this loop), and it's checked independently per empire so a
+// packed arena just pauses new spawns rather than piling up forever --
+// this is what keeps 5-6 empires "a nightmare" rather than "a slideshow".
+const WAR_ENEMY_CAP = 240;
+
 export function startWarMode(world, empireCount) {
   world.empires = [];
-  const n = Math.max(2, Math.min(4, empireCount));
+  const n = Math.max(MIN_EMPIRES, Math.min(MAX_EMPIRES, empireCount));
+  // Total boss HP/dmg budget stays roughly flat past 4 empires (hpScale*n
+  // and dmgScale*n barely grow beyond n=4) -- the difficulty spike from
+  // more empires comes from more simultaneous troop directors and more
+  // fronts to manage, not from bosses turning into unkillable HP bricks.
+  const hpScale = n <= 4 ? 0.55 : 0.55 * (4 / n);
+  const dmgScale = n <= 4 ? 0.85 : 0.85 * Math.sqrt(4 / n);
   for (let i = 0; i < n; i++) {
     const ang = (TAU / n) * i - Math.PI / 2;
     const r = world.arenaRadius * 0.72;
@@ -25,8 +43,8 @@ export function startWarMode(world, empireCount) {
       x,
       y,
       faction,
-      hpScale: 0.55,
-      dmgScale: 0.85,
+      hpScale,
+      dmgScale,
       name: `${BOSS_TYPES[bossType].name} (Empire ${i + 1})`,
       empireId: faction,
       silent: true, // War Mode shows every boss, not a single "active" one
@@ -66,11 +84,13 @@ export function updateWarDirector(world, dt, player) {
     emp.nextSpawnAt -= dt;
     if (emp.nextSpawnAt <= 0) {
       emp.nextSpawnAt = Math.max(2.2, 6 - world.time / 220);
-      const table = empireWeightTable(world.time);
-      const type = weightedPick(world.rng, table);
-      const ang = world.rng.range(0, TAU);
-      const r = world.rng.range(90, 220);
-      spawnEnemy(world, type, boss.x + Math.cos(ang) * r, boss.y + Math.sin(ang) * r, emp.id);
+      if (world.enemies.length < WAR_ENEMY_CAP) {
+        const table = empireWeightTable(world.time);
+        const type = weightedPick(world.rng, table);
+        const ang = world.rng.range(0, TAU);
+        const r = world.rng.range(90, 220);
+        spawnEnemy(world, type, boss.x + Math.cos(ang) * r, boss.y + Math.sin(ang) * r, emp.id);
+      }
     }
   }
 

@@ -7,6 +7,7 @@ import { OVERFLOW_OPTIONS, REVIVE_OPTIONS } from "../game/levelup-options.js";
 import { ALLY_LIST } from "../game/allies.js";
 import { ENEMY_LIST } from "../game/enemies.js";
 import { BOSS_LIST } from "../game/bosses.js";
+import { MIN_EMPIRES, MAX_EMPIRES } from "../game/warmode.js";
 import { formatTime } from "../engine/utils.js";
 
 function resolveOptionDef(opt) {
@@ -354,20 +355,59 @@ export function renderAscension(meta, ascensionTiers) {
 }
 
 // ---------------- War Mode setup ----------------
+const WAR_THREAT_LABEL = {
+  2: "Easier -- two empires, still zero mercy.",
+  3: "Balanced.",
+  4: "Hard.",
+  5: "Very hard -- five fronts at once.",
+  6: "NIGHTMARE -- six empires, no infighting, full onslaught.",
+};
+
 export function renderWarSetup(onPick) {
-  const grid = el("warsetup-body");
-  clearChildren(grid);
-  for (const count of [2, 3, 4]) {
-    const card = makeCard({
-      icon: "⚔",
-      name: `${count} Empires`,
-      desc: `Fight ${count} rival bosses and their troops at once. They'll fight each other too.`,
-      meta: count === 4 ? "Maximum chaos" : count === 2 ? "Easier" : "Balanced",
-      accent: "#f87171",
-      onClick: () => onPick(count),
-    });
-    grid.appendChild(card);
-  }
+  const body = el("warsetup-body");
+  clearChildren(body);
+
+  const row = document.createElement("div");
+  row.className = "warsetup-slider-row";
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.id = "warsetup-slider";
+  slider.min = String(MIN_EMPIRES);
+  slider.max = String(MAX_EMPIRES);
+  slider.step = "1";
+  slider.value = "4";
+  row.appendChild(slider);
+  body.appendChild(row);
+
+  const readout = document.createElement("div");
+  readout.className = "warsetup-readout";
+  body.appendChild(readout);
+
+  const note = document.createElement("p");
+  note.className = "codex-subhint";
+  note.textContent =
+    "Empires never fight each other -- every boss and every troop from every empire hunts only you and your allies, so this is additive, not diluted.";
+  body.appendChild(note);
+
+  const updateReadout = () => {
+    const n = parseInt(slider.value, 10);
+    readout.innerHTML = "";
+    const big = document.createElement("span");
+    big.className = "warsetup-count";
+    big.textContent = `${n} Empire${n === 1 ? "" : "s"}`;
+    const label = document.createElement("span");
+    label.className = "warsetup-label";
+    label.textContent = WAR_THREAT_LABEL[n] || "";
+    readout.append(big, label);
+  };
+  slider.addEventListener("input", updateReadout);
+  updateReadout();
+
+  const startBtn = document.createElement("button");
+  startBtn.className = "btn btn-danger";
+  startBtn.textContent = "Deploy";
+  startBtn.addEventListener("click", () => onPick(parseInt(slider.value, 10)));
+  body.appendChild(startBtn);
 }
 
 // ---------------- Codex (ally + enemy + boss bestiary) ----------------

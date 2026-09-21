@@ -162,6 +162,15 @@ textarea#save-string { width: 100%; height: 70px; background: #060a12; color: va
 .codex-body .card-grid { width: 100%; max-height: none; overflow: visible; }
 .codex-subhint { font-size: 0.75rem; font-weight: 400; color: var(--text-dim); letter-spacing: 0; text-transform: none; }
 
+.warsetup-body { display: flex; flex-direction: column; align-items: center; gap: 16px; width: min(560px, 92vw); }
+.warsetup-slider-row { width: 100%; padding: 4px 8px; }
+.warsetup-slider-row input[type="range"] { width: 100%; }
+.warsetup-readout { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.warsetup-count { font-size: 1.6rem; font-weight: 700; color: #f87171; }
+.warsetup-label { font-size: 0.85rem; color: var(--text-dim); }
+.warsetup-body .codex-subhint { text-align: center; max-width: 420px; }
+.warsetup-body .btn-danger { padding: 12px 28px; font-size: 1rem; }
+
 @media (max-width: 560px) {
   .hud-center { font-size: 1rem; }
   .hp-bar, .xp-bar { width: 110px; }

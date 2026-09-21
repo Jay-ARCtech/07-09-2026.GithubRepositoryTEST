@@ -11,6 +11,15 @@ export const META_UPGRADES = {
   luck: { label: "Fortune Core", desc: "+3% luck per level", icon: "☘", max: 8, baseCost: 14 },
 };
 
+// Ally-specific permanent upgrades, bought from the Codex screen. These
+// don't unlock an ally (the passives do that) -- they make an already-
+// unlocked ally hit harder / heal more / survive longer, every run.
+export const ALLY_META_UPGRADES = {
+  drone: { label: "Drone Firmware", desc: "+8% drone damage & HP per level", icon: "⟁", max: 8, baseCost: 20 },
+  medic: { label: "Medic Training", desc: "+8% healing per level", icon: "✚", max: 8, baseCost: 20 },
+  vanguard: { label: "Vanguard Armor", desc: "+8% Vanguard HP & damage per level", icon: "⛨", max: 8, baseCost: 20 },
+};
+
 export function upgradeCost(def, currentLevel) {
   return Math.round(def.baseCost * Math.pow(currentLevel + 1, 1.55));
 }

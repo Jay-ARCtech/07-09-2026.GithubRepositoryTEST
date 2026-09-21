@@ -10,29 +10,36 @@ import { audio } from "../engine/audio.js";
 export const BOSS_TYPES = {
   colossus: {
     name: "Colossus",
+    icon: "⬢",
     color: "#f87171",
     radius: 46,
     hpBase: 900,
     speed: 60,
     pattern: "slam",
+    desc: "Charges in and telegraphs a heavy ground slam with a visible radius warning. Get out of the circle before it lands.",
   },
   swarmQueen: {
     name: "Swarm Queen",
+    icon: "⬡",
     color: "#4ade80",
     radius: 38,
     hpBase: 700,
     speed: 75,
     pattern: "summon",
+    desc: "Kites at range while periodically summoning waves of Grunts. Kill it fast or the arena fills up.",
   },
   voidLancer: {
     name: "Void Lancer",
+    icon: "⬣",
     color: "#c084fc",
     radius: 40,
     hpBase: 800,
     speed: 90,
     pattern: "spread",
+    desc: "Fires a full-circle spread of bolts on a short cooldown. Keep moving; there's no safe spot that stays safe.",
   },
 };
+export const BOSS_LIST = Object.entries(BOSS_TYPES).map(([id, def]) => ({ id, ...def }));
 
 export function spawnBoss(world, typeId, opts = {}) {
   const def = BOSS_TYPES[typeId];

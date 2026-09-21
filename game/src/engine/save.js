@@ -26,6 +26,7 @@ function defaults() {
       cooldown: 0,
       luck: 0,
     },
+    allyUpgrades: { drone: 0, medic: 0, vanguard: 0 }, // see ALLY_META_UPGRADES in upgrades.js
     achievements: {},
     settings: {
       masterVolume: 0.8,
@@ -46,6 +47,7 @@ function migrate(data) {
   // always exist even when loading an older save.
   const merged = { ...base, ...data };
   merged.upgrades = { ...base.upgrades, ...(data.upgrades || {}) };
+  merged.allyUpgrades = { ...base.allyUpgrades, ...(data.allyUpgrades || {}) };
   merged.settings = { ...base.settings, ...(data.settings || {}) };
   merged.achievements = { ...base.achievements, ...(data.achievements || {}) };
   merged.dailyBest = { ...base.dailyBest, ...(data.dailyBest || {}) };
@@ -64,6 +66,10 @@ function migrate(data) {
   for (const key of Object.keys(merged.upgrades)) {
     const n = Number(merged.upgrades[key]);
     merged.upgrades[key] = Number.isFinite(n) ? n : base.upgrades[key];
+  }
+  for (const key of Object.keys(merged.allyUpgrades)) {
+    const n = Number(merged.allyUpgrades[key]);
+    merged.allyUpgrades[key] = Number.isFinite(n) ? n : base.allyUpgrades[key];
   }
   if (!Array.isArray(merged.unlockedCharacters)) merged.unlockedCharacters = base.unlockedCharacters;
   if (!Array.isArray(merged.unlockedWeapons)) merged.unlockedWeapons = base.unlockedWeapons;

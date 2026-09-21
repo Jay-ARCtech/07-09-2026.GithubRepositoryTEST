@@ -80,6 +80,14 @@ export function recomputeStats(player, meta, charDef) {
 
   applyAscensionBonuses(s, meta);
 
+  // Codex ally upgrades (Cores-bought, permanent across runs).
+  const au = meta.allyUpgrades;
+  if (au) {
+    s.allyDroneMetaMult = 1 + (au.drone || 0) * 0.08;
+    s.allyMedicMetaMult = 1 + (au.medic || 0) * 0.08;
+    s.allyVanguardMetaMult = 1 + (au.vanguard || 0) * 0.08;
+  }
+
   player.stats = s;
   player.maxHp = s.maxHp;
 }

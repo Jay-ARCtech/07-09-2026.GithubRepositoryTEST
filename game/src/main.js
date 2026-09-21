@@ -26,7 +26,7 @@ import { updateAlly, updateAllySystem } from "./game/allies.js";
 import { updateWarDirector, startWarMode } from "./game/warmode.js";
 import { spawnXpGem, spawnGold, spawnHealth, spawnChest, spawnOverdrive, updatePickup } from "./game/pickups.js";
 import { unlockAchievement } from "./game/achievements.js";
-import { META_UPGRADES, upgradeCost, computeCoresEarned } from "./game/upgrades.js";
+import { META_UPGRADES, ALLY_META_UPGRADES, upgradeCost, computeCoresEarned } from "./game/upgrades.js";
 import { generateOptions } from "./game/levelup-options.js";
 import { ASCENSION_TIERS, canAscend, ascend } from "./game/ascension.js";
 import { PASSIVE_LIST } from "./game/passives.js";
@@ -45,6 +45,7 @@ import {
   renderAchievements,
   renderAscension,
   renderWarSetup,
+  renderCodex,
   setMenuBestLabel,
 } from "./ui/screens.js";
 
@@ -188,6 +189,24 @@ function openArmory() {
   showScreen("screen-armory");
 }
 
+function handleAllyUpgradeBuy(key) {
+  const def = ALLY_META_UPGRADES[key];
+  const level = meta.allyUpgrades[key] || 0;
+  if (level >= def.max) return;
+  const cost = upgradeCost(def, level);
+  if (meta.cores < cost) return;
+  meta.cores -= cost;
+  meta.allyUpgrades[key] = level + 1;
+  writeSave(meta);
+  openCodex();
+}
+
+function openCodex() {
+  gameState = "codex";
+  renderCodex(meta, handleAllyUpgradeBuy);
+  showScreen("screen-codex");
+}
+
 function openAchievements() {
   gameState = "achievements";
   renderAchievements(meta);
@@ -244,6 +263,13 @@ function pauseGame() {
     overloadBtn.dataset.confirming = "";
     overloadBtn.textContent = "Overload Core (Ascend)";
   }
+  const reviveBtn = document.getElementById("btn-emergency-revive");
+  if (reviveBtn) {
+    reviveBtn.dataset.confirming = "";
+    reviveBtn.textContent = "Emergency Revive (lose all buffs)";
+    const anyDead = Object.values(world.allyDeadCount).some((n) => n > 0);
+    reviveBtn.disabled = !anyDead;
+  }
   showScreen("screen-pause");
 }
 function resumeGame() {
@@ -261,7 +287,7 @@ function quitToMenu() {
 function offerLevelUp() {
   gameState = "levelup";
   const choiceCount = 4 + (meta.ascensionLevel >= 1 ? 1 : 0);
-  const options = generateOptions(player, world.rng, choiceCount);
+  const options = generateOptions(player, world.rng, choiceCount, { deadAllyCount: world.allyDeadCount });
   world.rerollsLeft = world.rerollsLeft ?? 2 + (meta.ascensionLevel >= 2 ? 1 : 0);
   const show = () =>
     renderLevelUp(options, {
@@ -275,7 +301,7 @@ function offerLevelUp() {
       onReroll: () => {
         if (world.rerollsLeft <= 0) return;
         world.rerollsLeft -= 1;
-        const fresh = generateOptions(player, world.rng, choiceCount);
+        const fresh = generateOptions(player, world.rng, choiceCount, { deadAllyCount: world.allyDeadCount });
         options.length = 0;
         options.push(...fresh);
         show();
@@ -287,7 +313,19 @@ function offerLevelUp() {
   showScreen("screen-levelup");
 }
 
+function reviveOneAlly() {
+  const kind = Object.keys(world.allyDeadCount).find((k) => world.allyDeadCount[k] > 0);
+  if (!kind) return false;
+  world.allyDeadCount[kind] -= 1;
+  showToast(`${ALLY_LABELS[kind] || "Ally"} revived!`, "#22d3ee");
+  return true;
+}
+
 function applyOption(opt) {
+  if (opt.kind === "revive") {
+    reviveOneAlly();
+    return;
+  }
   if (opt.kind === "overflow") {
     player.overflowLevels[opt.id] = (player.overflowLevels[opt.id] || 0) + 1;
     recomputeStats(player, meta, charDef);
@@ -314,7 +352,7 @@ function applyOption(opt) {
 function openChest(chestEntity) {
   pendingChest = chestEntity;
   gameState = "chest";
-  const options = generateOptions(player, world.rng, 3);
+  const options = generateOptions(player, world.rng, 3, { deadAllyCount: world.allyDeadCount });
   renderChest(options, (opt) => {
     applyOption(opt);
     meta.chestsOpened = (meta.chestsOpened || 0) + 1;
@@ -358,7 +396,8 @@ function killAlly(e) {
   e.active = false;
   particles.spawnBurst(e.x, e.y, e.color, 14, { speed: 160 });
   audio.sfxHit();
-  showToast(`${ALLY_LABELS[e.allyKind] || "Ally"} lost!`, "#f87171");
+  world.allyDeadCount[e.allyKind] = (world.allyDeadCount[e.allyKind] || 0) + 1;
+  showToast(`${ALLY_LABELS[e.allyKind] || "Ally"} lost -- gone for good unless revived.`, "#f87171");
 }
 
 function killEnemy(e) {
@@ -477,6 +516,24 @@ function selfDestruct() {
   else showToast("Ascension requirement not met -- try a deeper run.", "#f87171");
   writeSave(meta);
   endRun(false, { selfDestruct: true, ascendedTier: tier });
+}
+
+// Unlike Overload Core, this doesn't end the run -- it's an in-run trade:
+// wipe every weapon/passive level (and overflow stacks) you've earned this
+// run back to your starting loadout, in exchange for every dead ally
+// coming back. A last-resort panic button, not a strategic choice.
+function emergencyRevive() {
+  if (gameState !== "paused") return;
+  const anyDead = Object.values(world.allyDeadCount).some((n) => n > 0);
+  if (!anyDead) return;
+  player.weapons = [{ id: charDef.startWeapon, level: 1, evolved: false }];
+  player.passives = [];
+  player.overflowLevels = { overflowDamage: 0, overflowSpeed: 0, overflowRegen: 0, overflowLuck: 0 };
+  for (const kind of Object.keys(world.allyDeadCount)) world.allyDeadCount[kind] = 0;
+  recomputeStats(player, meta, charDef);
+  player.hp = Math.min(player.hp, player.maxHp);
+  showToast("Emergency revive: allies restored, all buffs lost.", "#22d3ee");
+  resumeGame();
 }
 
 // ---------------------------------------------------------------- main update
@@ -1074,8 +1131,10 @@ startLoop((dt, now) => {
       playerHp: player?.hp,
       playerPos: player ? { x: player.x, y: player.y } : null,
       weapons: player?.weapons?.map((w) => ({ id: w.id, level: w.level, extra: !!w._blades })),
+      passiveCount: player?.passives?.length,
       ascensionLevel: meta.ascensionLevel,
       empires: world?.empires?.map((emp) => ({ id: emp.id, alive: emp.alive })),
+      allyDeadCount: world?.allyDeadCount ? { ...world.allyDeadCount } : null,
     };
   }
 });
@@ -1088,6 +1147,7 @@ initScreens({
   armory: openArmory,
   achievements: openAchievements,
   ascension: openAscension,
+  codex: openCodex,
   warmode: openWarSetup,
   settings: () => openSettings(gameState),
   "back-to-menu": goMenu,
@@ -1109,6 +1169,15 @@ initScreens({
     } else {
       btn.dataset.confirming = "1";
       btn.textContent = "Confirm? This ends the run.";
+    }
+  },
+  "emergency-revive": (btn) => {
+    if (btn.disabled) return;
+    if (btn.dataset.confirming === "1") {
+      emergencyRevive();
+    } else {
+      btn.dataset.confirming = "1";
+      btn.textContent = "Confirm? All weapon/passive levels reset.";
     }
   },
 });

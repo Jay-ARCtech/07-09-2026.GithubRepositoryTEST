@@ -1,15 +1,23 @@
 import { CHARACTER_LIST, isCharacterUnlocked } from "../game/characters.js";
 import { PASSIVES } from "../game/passives.js";
 import { WEAPONS } from "../game/weapons.js";
-import { META_UPGRADES, upgradeCost } from "../game/upgrades.js";
+import { META_UPGRADES, ALLY_META_UPGRADES, upgradeCost } from "../game/upgrades.js";
 import { ACHIEVEMENTS } from "../game/achievements.js";
-import { OVERFLOW_OPTIONS } from "../game/levelup-options.js";
+import { OVERFLOW_OPTIONS, REVIVE_OPTIONS } from "../game/levelup-options.js";
+import { ALLY_LIST } from "../game/allies.js";
+import { ENEMY_LIST } from "../game/enemies.js";
+import { BOSS_LIST } from "../game/bosses.js";
 import { formatTime } from "../engine/utils.js";
 
 function resolveOptionDef(opt) {
   if (opt.kind === "weapon") return WEAPONS[opt.id];
   if (opt.kind === "overflow") return OVERFLOW_OPTIONS[opt.id];
+  if (opt.kind === "revive") return REVIVE_OPTIONS[opt.id];
   return PASSIVES[opt.id];
+}
+
+function isZeroArgDesc(kind) {
+  return kind === "overflow" || kind === "revive";
 }
 
 const el = (id) => document.getElementById(id);
@@ -25,6 +33,7 @@ const SCREEN_IDS = [
   "screen-achievements",
   "screen-ascension",
   "screen-warsetup",
+  "screen-codex",
 ];
 
 export function hideAllScreens() {
@@ -118,11 +127,11 @@ export function renderLevelUp(options, ctx) {
   for (const opt of options) {
     const def = resolveOptionDef(opt);
     const nextLevel = opt.currentLevel + 1;
-    const desc = opt.isEvolution ? def.evolution.desc : opt.kind === "overflow" ? def.desc() : def.desc(nextLevel);
-    const kindLabel = opt.isEvolution ? "EVOLUTION" : opt.kind === "weapon" ? "Weapon" : opt.kind === "overflow" ? "Overflow" : "Passive";
+    const desc = opt.isEvolution ? def.evolution.desc : isZeroArgDesc(opt.kind) ? def.desc() : def.desc(nextLevel);
+    const kindLabel = opt.isEvolution ? "EVOLUTION" : opt.kind === "weapon" ? "Weapon" : opt.kind === "overflow" ? "Overflow" : opt.kind === "revive" ? "Revive" : "Passive";
     const card = makeCard({
       icon: def.icon,
-      name: opt.isEvolution ? `${def.name} → ${def.evolution.name}` : `${def.name}${opt.isNew ? " (New)" : ` Lv.${nextLevel}`}`,
+      name: opt.isEvolution ? `${def.name} → ${def.evolution.name}` : opt.kind === "revive" ? def.name : `${def.name}${opt.isNew ? " (New)" : ` Lv.${nextLevel}`}`,
       desc,
       meta: kindLabel,
       accent: def.color,
@@ -147,11 +156,11 @@ export function renderChest(options, onPick) {
   clearChildren(list);
   for (const opt of options) {
     const def = resolveOptionDef(opt);
-    const desc = opt.isEvolution ? def.evolution.desc : opt.kind === "overflow" ? def.desc() : def.desc(opt.currentLevel + 1);
-    const kindLabel = opt.isEvolution ? "EVOLUTION" : opt.kind === "weapon" ? "Weapon" : opt.kind === "overflow" ? "Overflow" : "Passive";
+    const desc = opt.isEvolution ? def.evolution.desc : isZeroArgDesc(opt.kind) ? def.desc() : def.desc(opt.currentLevel + 1);
+    const kindLabel = opt.isEvolution ? "EVOLUTION" : opt.kind === "weapon" ? "Weapon" : opt.kind === "overflow" ? "Overflow" : opt.kind === "revive" ? "Revive" : "Passive";
     const card = makeCard({
       icon: def.icon,
-      name: opt.isEvolution ? `${def.name} → ${def.evolution.name}` : `${def.name}${opt.isNew ? " (New)" : ""}`,
+      name: opt.isEvolution ? `${def.name} → ${def.evolution.name}` : opt.kind === "revive" ? def.name : `${def.name}${opt.isNew ? " (New)" : ""}`,
       desc,
       meta: kindLabel,
       accent: def.color,
@@ -358,6 +367,57 @@ export function renderWarSetup(onPick) {
       onClick: () => onPick(count),
     });
     grid.appendChild(card);
+  }
+}
+
+// ---------------- Codex (ally + enemy + boss bestiary) ----------------
+export function renderCodex(meta, onAllyUpgrade) {
+  el("codex-cores").textContent = `◈ ${meta.cores}`;
+
+  const allyGrid = el("codex-allies");
+  clearChildren(allyGrid);
+  for (const ally of ALLY_LIST) {
+    const key = ally.id;
+    const upDef = ALLY_META_UPGRADES[key];
+    const level = meta.allyUpgrades?.[key] || 0;
+    const maxed = level >= upDef.max;
+    const cost = maxed ? null : upgradeCost(upDef, level);
+    const card = makeCard({
+      icon: ally.icon,
+      name: `${ally.name} (Upgrade Lv ${level}/${upDef.max})`,
+      desc: `${ally.desc} Unlock via: ${ally.unlockHint}.`,
+      meta: maxed ? "MAXED" : `Upgrade: ${upDef.desc} -- Cost: ${cost} Cores`,
+      accent: ally.color,
+      locked: maxed || meta.cores < cost,
+      onClick: () => onAllyUpgrade(key),
+    });
+    allyGrid.appendChild(card);
+  }
+
+  const enemyGrid = el("codex-enemies");
+  clearChildren(enemyGrid);
+  for (const enemy of ENEMY_LIST) {
+    const card = makeCard({
+      icon: enemy.icon,
+      name: enemy.name,
+      desc: enemy.desc,
+      meta: enemy.behavior === "seek" ? "Melee" : enemy.behavior.startsWith("heal") || enemy.behavior.startsWith("summon") || enemy.behavior.startsWith("hazard") ? "Support" : "Ranged",
+      accent: enemy.color,
+    });
+    enemyGrid.appendChild(card);
+  }
+
+  const bossGrid = el("codex-bosses");
+  clearChildren(bossGrid);
+  for (const boss of BOSS_LIST) {
+    const card = makeCard({
+      icon: boss.icon,
+      name: boss.name,
+      desc: boss.desc,
+      meta: "Boss",
+      accent: boss.color,
+    });
+    bossGrid.appendChild(card);
   }
 }
 

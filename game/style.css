@@ -79,6 +79,19 @@ body { font-family: "Segoe UI", -apple-system, system-ui, Roboto, sans-serif; us
 .weapon-chip .lvl { position: absolute; bottom: -4px; right: -4px; background: #0b1220; border-radius: 6px; font-size: 0.6rem; padding: 1px 4px; font-weight: 700; }
 .weapon-chip.evolved { box-shadow: 0 0 12px currentColor; }
 
+#ally-tray { position: absolute; bottom: 62px; left: 16px; display: flex; gap: 8px; }
+.ally-chip {
+  width: 44px; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: rgba(15,23,42,0.85); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px;
+  padding: 5px 4px 6px; position: relative;
+}
+.ally-chip .ally-icon { font-size: 1rem; line-height: 1; }
+.ally-chip .bar { width: 100%; height: 5px; }
+.ally-chip.ally-dead { opacity: 0.45; filter: grayscale(1); }
+.ally-chip .ally-dead-mark { display: none; font-size: 0.9rem; }
+.ally-chip.ally-dead .ally-dead-mark { display: block; }
+.ally-chip.ally-dead .ally-icon, .ally-chip.ally-dead .bar { display: none; }
+
 #toast-container { position: absolute; top: 60px; right: 16px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
 .toast {
   background: var(--panel); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 8px 12px;
@@ -143,6 +156,11 @@ body { font-family: "Segoe UI", -apple-system, system-ui, Roboto, sans-serif; us
 textarea#save-string { width: 100%; height: 70px; background: #060a12; color: var(--text); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 6px; font-family: monospace; font-size: 0.7rem; }
 
 .achievement-locked { opacity: 0.4; }
+
+.codex-body { display: flex; flex-direction: column; align-items: center; gap: 8px; width: min(960px, 94vw); max-height: 68vh; overflow-y: auto; padding: 4px; }
+.codex-body h3 { align-self: flex-start; margin: 10px 0 -4px 4px; font-size: 1rem; letter-spacing: 0.5px; color: var(--text-dim); }
+.codex-body .card-grid { width: 100%; max-height: none; overflow: visible; }
+.codex-subhint { font-size: 0.75rem; font-weight: 400; color: var(--text-dim); letter-spacing: 0; text-transform: none; }
 
 @media (max-width: 560px) {
   .hud-center { font-size: 1rem; }

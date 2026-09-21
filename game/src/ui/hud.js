@@ -1,5 +1,6 @@
 import { formatTime } from "../engine/utils.js";
 import { WEAPONS } from "../game/weapons.js";
+import { ALLY_TYPES } from "../game/allies.js";
 
 const el = (id) => document.getElementById(id);
 
@@ -36,6 +37,41 @@ export function updateHud(world, player, meta) {
   }
 
   renderWeaponTray(player);
+  renderAllyTray(world, player);
+}
+
+const ALLY_KINDS = ["drone", "medic", "vanguard"];
+function renderAllyTray(world, player) {
+  const tray = el("ally-tray");
+  const stats = player.stats || {};
+  const slots = [];
+  for (const kind of ALLY_KINDS) {
+    const cap = Math.floor(stats[kind + "Max"] || 0);
+    if (cap <= 0 && !(world.allyDeadCount?.[kind] > 0)) continue;
+    for (const e of world.enemies) {
+      if (e.active && e.isAlly && e.allyKind === kind) slots.push({ kind, entity: e });
+    }
+    const deadCount = world.allyDeadCount?.[kind] || 0;
+    for (let i = 0; i < deadCount; i++) slots.push({ kind, entity: null });
+  }
+  if (tray.childElementCount !== slots.length) tray.innerHTML = "";
+  slots.forEach((slot, i) => {
+    let chip = tray.children[i];
+    if (!chip) {
+      chip = document.createElement("div");
+      chip.className = "ally-chip";
+      chip.innerHTML = `<div class="ally-icon"></div><div class="bar"><div class="bar-fill" style="background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div><div class="ally-dead-mark">☠</div>`;
+      tray.appendChild(chip);
+    }
+    const def = ALLY_TYPES[slot.kind];
+    const alive = !!slot.entity;
+    chip.classList.toggle("ally-dead", !alive);
+    chip.title = alive ? def.name : `${def.name} (permanently lost -- revive to bring it back)`;
+    chip.querySelector(".ally-icon").textContent = def.icon;
+    if (alive) {
+      chip.querySelector(".bar-fill").style.transform = `scaleX(${Math.max(0, slot.entity.hp / slot.entity.maxHp)})`;
+    }
+  });
 }
 
 function renderWarBossList(world) {

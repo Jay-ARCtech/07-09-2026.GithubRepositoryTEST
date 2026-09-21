@@ -15,6 +15,13 @@ export const OVERFLOW_OPTIONS = {
 };
 const OVERFLOW_IDS = Object.keys(OVERFLOW_OPTIONS);
 
+// Only offered when at least one ally has permanently died this run (see
+// world.allyDeadCount). Deliberately rare (low weight) -- "only if you can
+// find that card" -- rather than guaranteed, unlike the overflow options.
+export const REVIVE_OPTIONS = {
+  reviveAlly: { name: "Emergency Nanites", icon: "☤", color: "#22d3ee", desc: () => "Revive one of your fallen allies" },
+};
+
 function evolutionCandidate(player, w) {
   const def = WEAPONS[w.id];
   const evolveAt = def.evolveAt ?? def.maxLevel;
@@ -24,8 +31,12 @@ function evolutionCandidate(player, w) {
   return { kind: "weapon", id: w.id, currentLevel: w.level, isEvolution: true, weight: 6 };
 }
 
-export function generateOptions(player, rng, count = 4) {
+export function generateOptions(player, rng, count = 4, opts = {}) {
   const candidates = [];
+  const deadAllyCount = opts.deadAllyCount || {};
+  if (Object.values(deadAllyCount).some((n) => n > 0)) {
+    candidates.push({ kind: "revive", id: "reviveAlly", weight: 2 });
+  }
 
   for (const w of player.weapons) {
     const evo = evolutionCandidate(player, w);

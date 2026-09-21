@@ -37,6 +37,9 @@ export function createWorld(seedOverride = null, mode = "survival") {
     overdriveUntil: 0,
     // war mode only:
     empires: [],
+    // Ally permadeath: once a slot dies it stays empty (no auto-respawn)
+    // until revived by a "Revive Ally" card or the Emergency Revive action.
+    allyDeadCount: { drone: 0, medic: 0, vanguard: 0 },
   };
 }
 

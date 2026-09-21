@@ -6,10 +6,44 @@ import { allocId, spawnBullet, clampToArena, findNearestHostile } from "./world.
 import { angleTo, dist, TAU } from "../engine/utils.js";
 
 export const ALLY_TYPES = {
-  drone: { hp: 24, speed: 190, dmg: 4, radius: 10, color: "#38bdf8", behavior: "allyRanged" },
-  medic: { hp: 30, speed: 170, dmg: 0, radius: 11, color: "#4ade80", behavior: "allyMedic" },
-  vanguard: { hp: 70, speed: 150, dmg: 9, radius: 15, color: "#fbbf24", behavior: "allySeek" },
+  drone: {
+    name: "Combat Drone",
+    icon: "⟁",
+    hp: 24,
+    speed: 190,
+    dmg: 4,
+    radius: 10,
+    color: "#38bdf8",
+    behavior: "allyRanged",
+    desc: "Keeps its distance and auto-fires at the nearest hostile. Fragile but fast, and you can field up to 3 with a maxed Drone Bay.",
+    unlockHint: "Passive: Drone Bay",
+  },
+  medic: {
+    name: "Field Medic",
+    icon: "✚",
+    hp: 30,
+    speed: 170,
+    dmg: 0,
+    radius: 11,
+    color: "#4ade80",
+    behavior: "allyMedic",
+    desc: "Doesn't fight -- pulses healing to you and every other living ally nearby every 3s. Losing it means losing your only in-run sustain.",
+    unlockHint: "Passive: Field Medic",
+  },
+  vanguard: {
+    name: "Vanguard",
+    icon: "⛨",
+    hp: 70,
+    speed: 150,
+    dmg: 9,
+    radius: 15,
+    color: "#fbbf24",
+    behavior: "allySeek",
+    desc: "A tanky melee ally that charges the nearest hostile and soaks contact damage that would otherwise land on you.",
+    unlockHint: "Passive: Vanguard Beacon",
+  },
 };
+export const ALLY_LIST = Object.entries(ALLY_TYPES).map(([id, def]) => ({ id, ...def }));
 
 export function spawnAlly(world, kind, x, y, powerMult = 1) {
   const def = ALLY_TYPES[kind];
@@ -140,32 +174,36 @@ export function updateAlly(e, world, dt, player) {
 const RESPAWN_DELAY = { drone: 8, medic: 12, vanguard: 10 };
 
 // Reconciles desired ally counts (read off player.stats, granted by the
-// three ally passives) against what's currently alive, trickling in
-// replacements on a cooldown rather than mass-respawning everything the
-// instant a slot frees up.
+// three ally passives, minus however many of that kind have permanently
+// died this run) against what's currently alive, trickling in replacements
+// on a cooldown. A dead slot is NOT refilled here -- world.allyDeadCount is
+// only ever reduced by the "Revive Ally" card or the Emergency Revive
+// action (see main.js), which is what makes ally deaths actually matter.
 export function updateAllySystem(world, dt, player) {
   world._allyNextSpawnAt = world._allyNextSpawnAt || {};
+  world.allyDeadCount = world.allyDeadCount || { drone: 0, medic: 0, vanguard: 0 };
   const stats = player.stats || {};
-  const wanted = {
+  const cap = {
     drone: Math.floor(stats.droneMax || 0),
     medic: Math.floor(stats.medicMax || 0),
     vanguard: Math.floor(stats.vanguardMax || 0),
   };
   const powerMult = {
-    drone: stats.droneDmgMult || 1,
-    medic: 1,
-    vanguard: stats.vanguardHpMult || 1,
+    drone: (stats.droneDmgMult || 1) * (stats.allyDroneMetaMult || 1),
+    medic: stats.allyMedicMetaMult || 1,
+    vanguard: (stats.vanguardHpMult || 1) * (stats.allyVanguardMetaMult || 1),
   };
 
-  for (const kind of Object.keys(wanted)) {
-    if (wanted[kind] <= 0) continue;
+  for (const kind of Object.keys(cap)) {
+    const wanted = Math.max(0, cap[kind] - (world.allyDeadCount[kind] || 0));
+    if (wanted <= 0) continue;
     let alive = 0;
     for (const e of world.enemies) if (e.active && e.isAlly && e.allyKind === kind) alive++;
-    if (alive < wanted[kind] && world.time >= (world._allyNextSpawnAt[kind] || 0)) {
+    if (alive < wanted && world.time >= (world._allyNextSpawnAt[kind] || 0)) {
       const ang = world.rng.range(0, TAU);
       const r = 70 + world.rng.range(0, 40);
       const ally = spawnAlly(world, kind, player.x + Math.cos(ang) * r, player.y + Math.sin(ang) * r, powerMult[kind]);
-      if (kind === "medic") ally.healPower = stats.healPower || 6;
+      if (kind === "medic") ally.healPower = (stats.healPower || 6) * (stats.allyMedicMetaMult || 1);
       world._allyNextSpawnAt[kind] = world.time + RESPAWN_DELAY[kind];
     }
   }

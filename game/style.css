@@ -62,6 +62,14 @@ body { font-family: "Segoe UI", -apple-system, system-ui, Roboto, sans-serif; us
 .boss-bar { width: 100%; height: 14px; }
 .boss-bar .bar-fill { background: linear-gradient(90deg, #f87171, #fb923c); }
 
+#war-boss-list { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: min(340px, 88vw); display: flex; flex-direction: column; gap: 6px; }
+#war-boss-list.hidden { display: none; }
+.war-boss-row { background: var(--panel); border-radius: 8px; padding: 4px 8px; border: 1px solid rgba(255,255,255,0.1); }
+.war-boss-row .war-boss-name { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.5px; display: flex; justify-content: space-between; }
+.war-boss-row .bar { height: 8px; margin-top: 2px; }
+.war-boss-row.eliminated { opacity: 0.35; }
+.war-boss-row.eliminated .war-boss-name::after { content: " (eliminated)"; font-weight: 400; }
+
 #weapon-tray { position: absolute; bottom: 14px; left: 16px; display: flex; gap: 8px; }
 .weapon-chip {
   width: 40px; height: 40px; border-radius: 10px; background: rgba(15,23,42,0.85);
@@ -107,6 +115,8 @@ body { font-family: "Segoe UI", -apple-system, system-ui, Roboto, sans-serif; us
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-primary { background: linear-gradient(90deg, #38bdf8, #a78bfa); color: #0b1220; border: none; box-shadow: 0 4px 20px rgba(125,211,252,0.35); }
 .btn-primary:hover { box-shadow: 0 6px 26px rgba(125,211,252,0.5); }
+.btn-danger { border-color: rgba(248,113,113,0.5); color: #fca5a5; }
+.btn-danger:hover { background: rgba(248,113,113,0.16); }
 
 .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; width: min(920px, 92vw); max-height: 60vh; overflow-y: auto; padding: 4px; }
 .card {

@@ -1,4 +1,4 @@
-import { allocId, spawnBullet, clampToArena } from "./world.js";
+import { allocId, spawnBullet, clampToArena, findNearestHostile } from "./world.js";
 import { angleTo, TAU } from "../engine/utils.js";
 import { bus } from "../engine/bus.js";
 import { audio } from "../engine/audio.js";
@@ -34,23 +34,25 @@ export const BOSS_TYPES = {
   },
 };
 
-export function spawnBoss(world, typeId) {
+export function spawnBoss(world, typeId, opts = {}) {
   const def = BOSS_TYPES[typeId];
-  const scale = 1 + world.bossesKilled * 0.5 + world.time / 400;
+  const scale = (opts.hpScale ?? 1) * (1 + world.bossesKilled * 0.5 + world.time / 400);
+  const faction = opts.faction ?? "horde";
   const boss = {
     id: allocId(),
     active: true,
     type: typeId,
+    faction,
     isBoss: true,
-    x: 0,
-    y: -world.arenaRadius * 0.7,
+    x: opts.x ?? 0,
+    y: opts.y ?? -world.arenaRadius * 0.7,
     vx: 0,
     vy: 0,
     radius: def.radius,
     hp: def.hpBase * scale,
     maxHp: def.hpBase * scale,
     speed: def.speed,
-    dmg: 16 * (1 + world.bossesKilled * 0.3),
+    dmg: 16 * (1 + world.bossesKilled * 0.3) * (opts.dmgScale ?? 1),
     xpValue: 120,
     elite: false,
     color: def.color,
@@ -63,10 +65,11 @@ export function spawnBoss(world, typeId) {
     contactCooldown: 0,
     phaseTimer: 2,
     telegraph: null,
-    name: def.name,
+    name: opts.name ?? def.name,
+    empireId: opts.empireId ?? null,
   };
   world.enemies.push(boss);
-  world.bossActive = boss;
+  if (!opts.silent) world.bossActive = boss;
   audio.sfxBossRoar();
   bus.emit("bossSpawned", boss);
   return boss;
@@ -76,19 +79,31 @@ export function updateBoss(e, world, dt, player) {
   if (e.hitFlash > 0) e.hitFlash -= dt;
   e.phaseTimer -= dt;
 
-  const ang = angleTo(e.x, e.y, player.x, player.y);
-  const d = Math.hypot(player.x - e.x, player.y - e.y);
+  const target = findNearestHostile(world, e, player, 2200) ?? player;
+  const ang = angleTo(e.x, e.y, target.x, target.y);
+  const d = Math.hypot(target.x - e.x, target.y - e.y);
 
   if (e.pattern === "slam") {
     if (!e.telegraph && e.phaseTimer <= 0) {
-      e.telegraph = { kind: "slam", t: 0.9, x: player.x, y: player.y, radius: 190 };
+      e.telegraph = { kind: "slam", t: 0.9, x: target.x, y: target.y, radius: 190 };
       e.phaseTimer = 3.2;
     }
     if (e.telegraph) {
       e.telegraph.t -= dt;
       if (e.telegraph.t <= 0) {
+        const dmg = e.dmg * 1.6;
         const dd = Math.hypot(player.x - e.telegraph.x, player.y - e.telegraph.y);
-        if (dd <= e.telegraph.radius) bus.emit("bossSlam", { x: e.telegraph.x, y: e.telegraph.y, dmg: e.dmg * 1.6 });
+        if (player.faction !== e.faction && dd <= e.telegraph.radius) {
+          bus.emit("bossSlam", { x: e.telegraph.x, y: e.telegraph.y, dmg });
+        }
+        for (const o of world.enemies) {
+          if (!o.active || o === e || o.faction === e.faction) continue;
+          const od = Math.hypot(o.x - e.telegraph.x, o.y - e.telegraph.y);
+          if (od <= e.telegraph.radius) {
+            o.hp -= dmg;
+            o.hitFlash = 0.15;
+          }
+        }
         world._spawnRing?.(e.telegraph.x, e.telegraph.y, e.telegraph.radius);
         audio.sfxExplosion();
         e.telegraph = null;
@@ -103,7 +118,7 @@ export function updateBoss(e, world, dt, player) {
     e.vy = Math.sin(ang) * e.speed * (d < 260 ? -1 : 1);
     if (e.phaseTimer <= 0) {
       e.phaseTimer = 5;
-      bus.emit("bossSummon", { x: e.x, y: e.y });
+      bus.emit("bossSummon", { x: e.x, y: e.y, faction: e.faction });
     }
   } else if (e.pattern === "spread") {
     e.vx = Math.cos(ang) * e.speed * (d < 320 ? -1 : 0.4);
@@ -124,6 +139,7 @@ export function updateBoss(e, world, dt, player) {
           color: "#c084fc",
           kind: "enemyShot",
           hostile: true,
+          sourceFaction: e.faction,
         });
       }
       audio.sfxShoot("lightning");

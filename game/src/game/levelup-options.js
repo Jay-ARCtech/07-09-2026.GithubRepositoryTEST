@@ -1,9 +1,24 @@
 import { WEAPON_LIST, WEAPONS } from "./weapons.js";
 import { PASSIVE_LIST, PASSIVES } from "./passives.js";
 
+// Endgame fallback: once every weapon/passive is maxed and every eligible
+// evolution taken, the real candidate pool runs dry. Without a fallback,
+// generateOptions returns fewer options than requested -- possibly zero --
+// and the level-up screen renders with no pickable cards and no dismiss
+// button, hard-softlocking the run. These four always-available, infinitely
+// stackable micro-bonuses guarantee there's always something to pick.
+export const OVERFLOW_OPTIONS = {
+  overflowDamage: { name: "Overcharge", icon: "⚔", color: "#f87171", desc: () => "+3% damage (stacks indefinitely)" },
+  overflowSpeed: { name: "Slipstream", icon: "⤳", color: "#34d399", desc: () => "+2% move speed (stacks indefinitely)" },
+  overflowRegen: { name: "Nanite Weave", icon: "♥", color: "#fb7185", desc: () => "+0.3 HP/s regen (stacks indefinitely)" },
+  overflowLuck: { name: "Fortune Engine", icon: "☘", color: "#4ade80", desc: () => "+2% luck (stacks indefinitely)" },
+};
+const OVERFLOW_IDS = Object.keys(OVERFLOW_OPTIONS);
+
 function evolutionCandidate(player, w) {
   const def = WEAPONS[w.id];
-  if (w.evolved || !def.evolution || w.level < def.maxLevel) return null;
+  const evolveAt = def.evolveAt ?? def.maxLevel;
+  if (w.evolved || !def.evolution || w.level < evolveAt) return null;
   const passive = player.passives.find((p) => p.id === def.evolution.requires);
   if (!passive || passive.level < PASSIVES[def.evolution.requires].maxLevel) return null;
   return { kind: "weapon", id: w.id, currentLevel: w.level, isEvolution: true, weight: 6 };
@@ -36,6 +51,13 @@ export function generateOptions(player, rng, count = 4) {
     for (const def of PASSIVE_LIST) {
       if (!owned.has(def.id)) candidates.push({ kind: "passive", id: def.id, currentLevel: 0, isNew: true, weight: 2 });
     }
+  }
+
+  // Always-available filler so the pool never runs dry once real content
+  // (weapons/passives/evolutions) is exhausted -- see OVERFLOW_OPTIONS above.
+  // Low weight keeps them rare while real choices still exist.
+  for (const id of OVERFLOW_IDS) {
+    candidates.push({ kind: "overflow", id, currentLevel: player.overflowLevels?.[id] ?? 0, weight: 1 });
   }
 
   // Weighted shuffle-and-pick without replacement.

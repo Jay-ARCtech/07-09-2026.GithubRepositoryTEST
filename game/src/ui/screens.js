@@ -3,7 +3,14 @@ import { PASSIVES } from "../game/passives.js";
 import { WEAPONS } from "../game/weapons.js";
 import { META_UPGRADES, upgradeCost } from "../game/upgrades.js";
 import { ACHIEVEMENTS } from "../game/achievements.js";
+import { OVERFLOW_OPTIONS } from "../game/levelup-options.js";
 import { formatTime } from "../engine/utils.js";
+
+function resolveOptionDef(opt) {
+  if (opt.kind === "weapon") return WEAPONS[opt.id];
+  if (opt.kind === "overflow") return OVERFLOW_OPTIONS[opt.id];
+  return PASSIVES[opt.id];
+}
 
 const el = (id) => document.getElementById(id);
 const SCREEN_IDS = [
@@ -16,6 +23,8 @@ const SCREEN_IDS = [
   "screen-settings",
   "screen-armory",
   "screen-achievements",
+  "screen-ascension",
+  "screen-warsetup",
 ];
 
 export function hideAllScreens() {
@@ -107,16 +116,15 @@ export function renderLevelUp(options, ctx) {
   const list = el("choice-list");
   clearChildren(list);
   for (const opt of options) {
-    const def = opt.kind === "weapon" ? WEAPONS[opt.id] : PASSIVES[opt.id];
+    const def = resolveOptionDef(opt);
     const nextLevel = opt.currentLevel + 1;
-    const desc = opt.isEvolution
-      ? def.evolution.desc
-      : def.desc(nextLevel);
+    const desc = opt.isEvolution ? def.evolution.desc : opt.kind === "overflow" ? def.desc() : def.desc(nextLevel);
+    const kindLabel = opt.isEvolution ? "EVOLUTION" : opt.kind === "weapon" ? "Weapon" : opt.kind === "overflow" ? "Overflow" : "Passive";
     const card = makeCard({
       icon: def.icon,
       name: opt.isEvolution ? `${def.name} → ${def.evolution.name}` : `${def.name}${opt.isNew ? " (New)" : ` Lv.${nextLevel}`}`,
       desc,
-      meta: opt.isEvolution ? "EVOLUTION" : opt.kind === "weapon" ? "Weapon" : "Passive",
+      meta: kindLabel,
       accent: def.color,
       onClick: () => ctx.onPick(opt),
     });
@@ -138,13 +146,14 @@ export function renderChest(options, onPick) {
   const list = el("chest-choice-list");
   clearChildren(list);
   for (const opt of options) {
-    const def = opt.kind === "weapon" ? WEAPONS[opt.id] : PASSIVES[opt.id];
-    const desc = opt.isEvolution ? def.evolution.desc : def.desc(opt.currentLevel + 1);
+    const def = resolveOptionDef(opt);
+    const desc = opt.isEvolution ? def.evolution.desc : opt.kind === "overflow" ? def.desc() : def.desc(opt.currentLevel + 1);
+    const kindLabel = opt.isEvolution ? "EVOLUTION" : opt.kind === "weapon" ? "Weapon" : opt.kind === "overflow" ? "Overflow" : "Passive";
     const card = makeCard({
       icon: def.icon,
       name: opt.isEvolution ? `${def.name} → ${def.evolution.name}` : `${def.name}${opt.isNew ? " (New)" : ""}`,
       desc,
-      meta: opt.isEvolution ? "EVOLUTION" : opt.kind === "weapon" ? "Weapon" : "Passive",
+      meta: kindLabel,
       accent: def.color,
       onClick: () => onPick(opt),
     });
@@ -153,8 +162,8 @@ export function renderChest(options, onPick) {
 }
 
 // ---------------- Game over ----------------
-export function renderGameOver({ victory, world, coresEarned, newBestTime, newBestKills, player }) {
-  el("gameover-title").textContent = victory ? "Cycle Complete" : "Run Ended";
+export function renderGameOver({ victory, world, coresEarned, newBestTime, newBestKills, player, selfDestruct, ascendedTier }) {
+  el("gameover-title").textContent = victory ? "Cycle Complete" : selfDestruct ? "Core Overloaded" : "Run Ended";
   const grid = el("gameover-stats");
   clearChildren(grid);
   const rows = [
@@ -164,6 +173,8 @@ export function renderGameOver({ victory, world, coresEarned, newBestTime, newBe
     ["Bosses Defeated", world.bossesKilled],
     ["Cores Earned", `+${coresEarned}`],
   ];
+  if (ascendedTier) rows.push([`Ascended: Tier ${ascendedTier.tier}`, ascendedTier.name]);
+  else if (selfDestruct) rows.push(["Ascension", "Requirement not met"]);
   if (newBestTime) rows.push(["New Best Time!", "★"]);
   if (newBestKills) rows.push(["New Best Kills!", "★"]);
   for (const [label, val] of rows) {
@@ -311,6 +322,42 @@ export function renderAchievements(meta) {
     l.textContent = `${unlocked ? "★" : "☆"} ${def.name} — ${def.desc}`;
     row.appendChild(l);
     grid.appendChild(row);
+  }
+}
+
+// ---------------- Ascension ----------------
+export function renderAscension(meta, ascensionTiers) {
+  el("ascension-level-label").textContent = `(${meta.ascensionLevel || 0}/${ascensionTiers.length})`;
+  const grid = el("ascension-body");
+  clearChildren(grid);
+  ascensionTiers.forEach((t, i) => {
+    const unlocked = (meta.ascensionLevel || 0) > i;
+    const row = document.createElement("div");
+    row.className = "stat-row" + (unlocked ? "" : " achievement-locked");
+    const l = document.createElement("span");
+    l.textContent = `${unlocked ? "★" : "☆"} Tier ${t.tier}: ${t.name} — ${t.desc}`;
+    const v = document.createElement("span");
+    v.className = "stat-val";
+    v.textContent = unlocked ? "Owned" : `Needs Lv.${t.levelRequirement}`;
+    row.append(l, v);
+    grid.appendChild(row);
+  });
+}
+
+// ---------------- War Mode setup ----------------
+export function renderWarSetup(onPick) {
+  const grid = el("warsetup-body");
+  clearChildren(grid);
+  for (const count of [2, 3, 4]) {
+    const card = makeCard({
+      icon: "⚔",
+      name: `${count} Empires`,
+      desc: `Fight ${count} rival bosses and their troops at once. They'll fight each other too.`,
+      meta: count === 4 ? "Maximum chaos" : count === 2 ? "Easier" : "Balanced",
+      accent: "#f87171",
+      onClick: () => onPick(count),
+    });
+    grid.appendChild(card);
   }
 }
 

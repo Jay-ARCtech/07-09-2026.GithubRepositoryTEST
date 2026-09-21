@@ -19,15 +19,51 @@ export function updateHud(world, player, meta) {
   vignette.classList.toggle("low-hp", player.hp / player.maxHp < 0.28);
 
   const bossWrap = el("boss-bar-wrap");
-  if (world.bossActive) {
-    bossWrap.classList.remove("hidden");
-    el("boss-name").textContent = world.bossActive.name;
-    el("boss-bar-fill").style.transform = `scaleX(${Math.max(0, world.bossActive.hp / world.bossActive.maxHp)})`;
-  } else {
+  const warList = el("war-boss-list");
+  if (world.mode === "war") {
     bossWrap.classList.add("hidden");
+    warList.classList.remove("hidden");
+    renderWarBossList(world);
+  } else {
+    warList.classList.add("hidden");
+    if (world.bossActive) {
+      bossWrap.classList.remove("hidden");
+      el("boss-name").textContent = world.bossActive.name;
+      el("boss-bar-fill").style.transform = `scaleX(${Math.max(0, world.bossActive.hp / world.bossActive.maxHp)})`;
+    } else {
+      bossWrap.classList.add("hidden");
+    }
   }
 
   renderWeaponTray(player);
+}
+
+function renderWarBossList(world) {
+  const list = el("war-boss-list");
+  const wanted = world.empires.length;
+  if (list.childElementCount !== wanted) {
+    list.innerHTML = "";
+    for (let i = 0; i < wanted; i++) {
+      const row = document.createElement("div");
+      row.className = "war-boss-row";
+      row.innerHTML = `<div class="war-boss-name"><span class="wb-label"></span><span class="wb-hp"></span></div><div class="bar"><div class="bar-fill wb-fill" style="background: linear-gradient(90deg, #f87171, #fb923c);"></div></div>`;
+      list.appendChild(row);
+    }
+  }
+  world.empires.forEach((emp, i) => {
+    const row = list.children[i];
+    if (!row) return;
+    const boss = world.enemies.find((e) => e.id === emp.bossId);
+    row.classList.toggle("eliminated", !emp.alive || !boss);
+    row.querySelector(".wb-label").textContent = boss ? boss.name : `Empire ${i + 1}`;
+    if (boss && emp.alive) {
+      row.querySelector(".wb-hp").textContent = `${Math.max(0, Math.round(boss.hp))}/${Math.round(boss.maxHp)}`;
+      row.querySelector(".wb-fill").style.transform = `scaleX(${Math.max(0, boss.hp / boss.maxHp)})`;
+    } else {
+      row.querySelector(".wb-hp").textContent = "";
+      row.querySelector(".wb-fill").style.transform = "scaleX(0)";
+    }
+  });
 }
 
 function renderWeaponTray(player) {

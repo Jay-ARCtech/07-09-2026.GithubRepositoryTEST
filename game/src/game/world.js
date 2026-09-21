@@ -10,11 +10,12 @@ export function allocId() {
 const BULLET_POOL_SIZE = 500;
 const ARENA_RADIUS = 1600; // bounded circular arena keeps pacing tight
 
-export function createWorld(seedOverride = null) {
+export function createWorld(seedOverride = null, mode = "survival") {
   const seed = seedOverride ?? (Date.now() ^ 0x9e3779b9) >>> 0;
   return {
     rng: new RNG(seed),
     seed,
+    mode, // "survival" | "war"
     arenaRadius: ARENA_RADIUS,
     time: 0,
     kills: 0,
@@ -25,7 +26,8 @@ export function createWorld(seedOverride = null) {
     ended: false,
     victory: false,
     player: null,
-    enemies: [],
+    enemies: [], // hostile units AND player allies, distinguished by .faction / .isAlly
+    hazards: [],
     bullets: Array.from({ length: BULLET_POOL_SIZE }, () => ({ active: false })),
     pickups: [],
     chestPending: null,
@@ -33,7 +35,51 @@ export function createWorld(seedOverride = null) {
     nextBossAt: 4.5 * 60,
     totalBossesForVictory: 4,
     overdriveUntil: 0,
+    // war mode only:
+    empires: [],
   };
+}
+
+// Faction-aware targeting shared by enemy AI, boss AI, and ally AI. Returns
+// the nearest active unit (the player, or any world.enemies entry) whose
+// faction differs from `unit.faction`, within maxRange. This one function
+// is what makes cross-faction combat (allies vs horde, empire vs empire in
+// War Mode, everything vs the player) fall out of a single code path
+// instead of needing bespoke AI per matchup.
+export function findNearestHostile(world, unit, player, maxRange = Infinity) {
+  let best = null;
+  let bestD = maxRange * maxRange;
+  if (player && player.faction !== unit.faction && player.hp > 0) {
+    const d = (player.x - unit.x) ** 2 + (player.y - unit.y) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = player;
+    }
+  }
+  for (const o of world.enemies) {
+    if (o === unit || !o.active || o.faction === unit.faction) continue;
+    const d = (o.x - unit.x) ** 2 + (o.y - unit.y) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = o;
+    }
+  }
+  return best;
+}
+
+export function spawnHazard(world, x, y, opts) {
+  world.hazards.push({
+    id: allocId(),
+    active: true,
+    x,
+    y,
+    radius: opts.radius ?? 90,
+    dps: opts.dps ?? 8,
+    slowMult: opts.slowMult ?? 0.55,
+    color: opts.color ?? "#f472b6",
+    createdAt: world.time,
+    expiresAt: world.time + (opts.duration ?? 6),
+  });
 }
 
 export function dailySeedToday() {
@@ -63,6 +109,13 @@ export function spawnBullet(world, opts) {
     orbit: opts.orbit ?? null, // { angle, radius, speed } for attached orbiter blades
     dot: opts.dot ?? null,
     ownerHitCooldown: opts.ownerHitCooldown ?? null, // Map<enemyId, timeUntilNextHit> for continuous-contact weapons
+    hostile: opts.hostile ?? false,
+    // Every bullet is "owned" by a faction; collision resolution hits
+    // anything whose faction differs from this, rather than hardcoding
+    // "player bullets hit world.enemies" -- that's what lets ally-fired
+    // shots, horde shots, and (in War Mode) empire-vs-empire shots all
+    // reuse the same collision code.
+    sourceFaction: opts.sourceFaction ?? (opts.hostile ? "horde" : "player"),
   });
   b._hitSet = b._hitSet || new Set();
   b._hitSet.clear();

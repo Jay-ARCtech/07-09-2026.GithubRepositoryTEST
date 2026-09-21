@@ -23,6 +23,7 @@
       <div id="boss-name"></div>
       <div class="bar boss-bar"><div id="boss-bar-fill" class="bar-fill"></div></div>
     </div>
+    <div id="war-boss-list" class="hidden"></div>
     <div class="hud-top">
       <div class="hud-left">
         <div class="level-badge" id="hud-level">1</div>
@@ -47,13 +48,15 @@
       <p class="subtitle">Survive the swarm. Evolve your arsenal. Break the cycle.</p>
       <div class="menu-buttons">
         <button class="btn btn-primary" data-action="play">Play</button>
+        <button class="btn" data-action="warmode">All-Out War</button>
         <button class="btn" data-action="daily">Daily Challenge</button>
         <button class="btn" data-action="armory">Armory</button>
+        <button class="btn" data-action="ascension">Ascension</button>
         <button class="btn" data-action="achievements">Achievements</button>
         <button class="btn" data-action="settings">Settings</button>
         <button class="btn hidden" id="btn-quit" data-action="quit">Quit</button>
       </div>
-      <div class="menu-footer">v1.0.0 &middot; <span id="best-run-label"></span></div>
+      <div class="menu-footer">v1.1.0 &middot; <span id="best-run-label"></span></div>
     </div>
   </div>
 
@@ -71,6 +74,7 @@
     <div class="menu-buttons">
       <button class="btn btn-primary" data-action="resume">Resume</button>
       <button class="btn" data-action="settings">Settings</button>
+      <button class="btn btn-danger" id="btn-overload" data-action="overload">Overload Core (Ascend)</button>
       <button class="btn" data-action="quit-to-menu">Quit to Menu</button>
     </div>
   </div>
@@ -115,6 +119,24 @@
   <div id="screen-achievements" class="screen hidden">
     <h2>Achievements</h2>
     <div id="achievements-body" class="stats-grid"></div>
+    <div class="screen-actions">
+      <button class="btn" data-action="back-to-menu">Back</button>
+    </div>
+  </div>
+
+  <div id="screen-ascension" class="screen hidden">
+    <h2>Ascension <span id="ascension-level-label"></span></h2>
+    <p class="subtitle">Pause mid-run and choose "Overload Core" once you've reached a tier's level requirement to bank it permanently.</p>
+    <div id="ascension-body" class="stats-grid"></div>
+    <div class="screen-actions">
+      <button class="btn" data-action="back-to-menu">Back</button>
+    </div>
+  </div>
+
+  <div id="screen-warsetup" class="screen hidden">
+    <h2>All-Out War</h2>
+    <p class="subtitle">Choose how many rival empires to fight. Their bosses hunt you, your allies, and each other -- the last one standing wins.</p>
+    <div id="warsetup-body" class="card-grid"></div>
     <div class="screen-actions">
       <button class="btn" data-action="back-to-menu">Back</button>
     </div>

@@ -105,6 +105,49 @@ deliberately builds survivability. That gap is exactly why
 `STEAM_RELEASE_GUIDE.md` calls out human playtesting as a remaining
 step rather than claiming this is tuned to a final release bar.
 
+## v1.1.0: combat variety, prestige, and All-Out War
+
+Direct response to player feedback that the horde was one-note ("everything
+just chases and touches you") and that the meta-progression had a hard
+ceiling ("once I maxed everything, the game had nothing left to show me").
+
+- **Faction-based combat.** Every combat unit (player, enemy, boss, ally)
+  now carries a `faction`. Bullet collision, contact damage, and AI target
+  selection (`findNearestHostile` in `world.js`) all resolve purely by
+  faction mismatch instead of a hardcoded "enemies hit the player" rule.
+  This one change is what makes allies, and later All-Out War, possible
+  without three parallel combat systems.
+- **6 new enemy archetypes**: gatling (burst-fire), sniper (telegraphed
+  long-range one-shot), launcher (lobbed AoE), healer (heals nearby
+  hostiles), summoner (spawns reinforcements), engineer (drops timed hazard
+  zones that damage/slow the player). Existing `shooter` is the "basic"
+  ranged archetype these build on.
+- **3 player allies** (Combat Drone, Field Medic, Vanguard), unlocked via
+  new passives, spawn into the same faction-aware system as hostiles and
+  can be killed and out-healed by the horde -- they're a real resource to
+  protect, not a free buff.
+- **Fixed a real softlock**: `generateOptions` could return fewer choices
+  than requested -- zero, once every weapon/passive was maxed -- rendering
+  an unpickable, undismissable level-up screen. Fixed with always-available
+  "Overflow" micro-bonuses (`OVERFLOW_OPTIONS` in `levelup-options.js`) so
+  the pool never runs dry. Also raised weapon/passive level caps 5→8
+  (evolution timing unchanged via a separate `evolveAt` field) and steepened
+  the XP curve, since the old curve let an efficient player exhaust the
+  entire content pool in the first few minutes.
+- **Ascension**: pausing mid-run and choosing "Overload Core" ends the run
+  immediately but, if the run reached that tier's level requirement, banks
+  one of 10 permanent tiers (`ascension.js`) -- extra level-up choices,
+  rerolls, a free starting passive, permanent stat bonuses. This is the
+  intended move once a build is fully maxed, instead of a dead end.
+- **All-Out War**: a selectable mode (2-4 empires) that spawns that many
+  boss "capitals" simultaneously around the arena, each with its own
+  faction and troop spawner (`warmode.js`). Empires fight the player, the
+  player's allies, *and each other* -- for free, because that's just what
+  the generalized faction-targeting system does once each empire has its
+  own faction tag. Verified in headless playtest: an empire boss was
+  eliminated within 32 seconds of a 4-empire match starting, well before
+  the player alone could have killed it.
+
 ## Deliberately out of scope
 
 - Custom-drawn sprite art / hand-authored music (procedural instead, to

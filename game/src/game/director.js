@@ -9,8 +9,34 @@ const BOSS_INTERVAL = 4.5 * 60;
 function weightTableForTime(t) {
   if (t < 60) return { grunt: 70, runner: 30 };
   if (t < 150) return { grunt: 50, runner: 25, tank: 15, shooter: 10 };
-  if (t < 300) return { grunt: 35, runner: 20, tank: 20, shooter: 15, splitter: 10 };
-  return { grunt: 25, runner: 20, tank: 20, shooter: 20, splitter: 15 };
+  if (t < 300) return { grunt: 32, runner: 18, tank: 18, shooter: 12, splitter: 10, gatling: 6, healer: 4 };
+  if (t < 480)
+    return {
+      grunt: 22,
+      runner: 15,
+      tank: 15,
+      shooter: 12,
+      splitter: 10,
+      gatling: 9,
+      sniper: 7,
+      launcher: 6,
+      healer: 5,
+      summoner: 5,
+      engineer: 4,
+    };
+  return {
+    grunt: 16,
+    runner: 12,
+    tank: 14,
+    shooter: 10,
+    splitter: 9,
+    gatling: 10,
+    sniper: 9,
+    launcher: 8,
+    healer: 6,
+    summoner: 6,
+    engineer: 5,
+  };
 }
 
 function weightedPick(rng, table) {

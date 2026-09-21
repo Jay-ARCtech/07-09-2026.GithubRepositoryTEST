@@ -1,8 +1,14 @@
 import { PASSIVES } from "./passives.js";
 import { WEAPONS } from "./weapons.js";
+import { applyAscensionBonuses } from "./ascension.js";
 
+// Steeper than the original curve: playtesting (and direct player feedback)
+// showed the old formula let an efficient player chain-level off a single
+// AoE kill's worth of XP gems and blow through the entire weapon/passive
+// pool in the first few minutes, hitting the "nothing left to offer" wall
+// far earlier than the run's actual difficulty ramp justified.
 export function xpToNext(level) {
-  return Math.floor(6 + level * 5 + Math.pow(level, 1.6));
+  return Math.floor(8 + level * 7 + Math.pow(level, 1.85));
 }
 
 export function createPlayer(charDef, meta) {
@@ -12,6 +18,7 @@ export function createPlayer(charDef, meta) {
     vx: 0,
     vy: 0,
     radius: 16,
+    faction: "player",
     color: charDef.color,
     level: 1,
     xp: 0,
@@ -27,6 +34,8 @@ export function createPlayer(charDef, meta) {
     charId: charDef.id,
     damageTakenThisBossFight: 0,
     hitFlash: 0,
+    hazardSlow: 1,
+    overflowLevels: { overflowDamage: 0, overflowSpeed: 0, overflowRegen: 0, overflowLuck: 0 },
   };
   recomputeStats(player, meta, charDef);
   player.hp = player.maxHp;
@@ -57,6 +66,20 @@ export function recomputeStats(player, meta, charDef) {
       else s[k] = (s[k] || 0) + v;
     }
   }
+
+  // Endgame overflow bonuses (see levelup-options.js OVERFLOW_OPTIONS) --
+  // small, uncapped stacking nudges so a maxed-out build always has
+  // *something* left to grow instead of hitting a hard progression wall.
+  const of = player.overflowLevels;
+  if (of) {
+    s.damageMult *= 1 + of.overflowDamage * 0.03;
+    s.moveSpeed *= 1 + of.overflowSpeed * 0.02;
+    s.regen += of.overflowRegen * 0.3;
+    s.luck += of.overflowLuck * 0.02;
+  }
+
+  applyAscensionBonuses(s, meta);
+
   player.stats = s;
   player.maxHp = s.maxHp;
 }
@@ -111,7 +134,7 @@ export function checkEvolutions(player) {
     if (w.evolved) continue;
     const def = WEAPONS[w.id];
     if (!def.evolution) continue;
-    if (w.level >= def.maxLevel) {
+    if (w.level >= (def.evolveAt ?? def.maxLevel)) {
       const passive = player.passives.find((p) => p.id === def.evolution.requires);
       if (passive && passive.level >= PASSIVES[def.evolution.requires].maxLevel) {
         w.evolved = true;

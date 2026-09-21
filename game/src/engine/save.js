@@ -16,6 +16,7 @@ function defaults() {
     dailyBest: {}, // { "2026-09-20": { seconds, kills } }
     unlockedCharacters: ["vanguard"],
     unlockedWeapons: ["blaster"],
+    ascensionLevel: 0, // 0-10, see ascension.js
     upgrades: {
       // permanent meta-progression, each level costs more cores
       maxHp: 0,
@@ -54,11 +55,12 @@ function migrate(data) {
   // a numeric field (e.g. a string where a number is expected); coerce
   // defensively so a bad import degrades to "reset that stat" rather than
   // poisoning downstream arithmetic (NaN comparisons, broken cost curves).
-  const numericFields = ["cores", "totalCoresEverEarned", "chestsOpened", "totalRuns", "bestSurvivalSeconds", "bestKills"];
+  const numericFields = ["cores", "totalCoresEverEarned", "chestsOpened", "totalRuns", "bestSurvivalSeconds", "bestKills", "ascensionLevel"];
   for (const field of numericFields) {
     const n = Number(merged[field]);
     merged[field] = Number.isFinite(n) ? n : base[field];
   }
+  merged.ascensionLevel = Math.max(0, Math.min(10, Math.round(merged.ascensionLevel)));
   for (const key of Object.keys(merged.upgrades)) {
     const n = Number(merged.upgrades[key]);
     merged.upgrades[key] = Number.isFinite(n) ? n : base.upgrades[key];

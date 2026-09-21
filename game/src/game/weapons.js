@@ -6,7 +6,7 @@ function nearestEnemy(world, x, y, maxRange = Infinity) {
   let best = null,
     bestD = maxRange * maxRange;
   for (const e of world.enemies) {
-    if (!e.active) continue;
+    if (!e.active || e.faction === "player") continue;
     const d = dist2(x, y, e.x, e.y);
     if (d < bestD) {
       bestD = d;
@@ -20,7 +20,7 @@ function nearbyEnemies(world, x, y, range, excludeSet) {
   const out = [];
   const r2 = range * range;
   for (const e of world.enemies) {
-    if (!e.active || excludeSet.has(e)) continue;
+    if (!e.active || e.faction === "player" || excludeSet.has(e)) continue;
     if (dist2(x, y, e.x, e.y) <= r2) out.push(e);
   }
   return out;
@@ -38,7 +38,8 @@ export const WEAPONS = {
     name: "Blaster",
     color: "#7dd3fc",
     icon: "◆",
-    maxLevel: 5,
+    maxLevel: 8,
+    evolveAt: 5,
     evolution: { requires: "scope", name: "Railgun", desc: "Piercing beam that melts anything in a line." },
     desc: (lvl) => `${lvl} shot(s), fires at nearest enemy`,
     update({ world, player, ws, dt, stats, rng }) {
@@ -78,7 +79,8 @@ export const WEAPONS = {
     name: "Orbiter Blades",
     color: "#facc15",
     icon: "✦",
-    maxLevel: 5,
+    maxLevel: 8,
+    evolveAt: 5,
     evolution: { requires: "core", name: "Blade Storm", desc: "Massive burning blades." },
     desc: (lvl) => `${1 + Math.floor(lvl / 2)} blade(s) circling you`,
     update({ world, player, ws, dt, stats }) {
@@ -119,7 +121,8 @@ export const WEAPONS = {
     name: "Nova Pulse",
     color: "#34d399",
     icon: "●",
-    maxLevel: 5,
+    maxLevel: 8,
+    evolveAt: 5,
     evolution: { requires: "battery", name: "Supernova", desc: "Bigger, faster, knock-back pulses." },
     desc: (lvl) => `AoE pulse every ${(2.6 - lvl * 0.25).toFixed(1)}s`,
     update({ world, player, ws, dt, stats }) {
@@ -151,7 +154,8 @@ export const WEAPONS = {
     name: "Homing Missiles",
     color: "#fb923c",
     icon: "▲",
-    maxLevel: 5,
+    maxLevel: 8,
+    evolveAt: 5,
     evolution: { requires: "plating", name: "Bunker Buster", desc: "Armor-piercing, bigger blast." },
     desc: (lvl) => `${1 + Math.floor(lvl / 2)} missile(s) per volley`,
     update({ world, player, ws, dt, stats, rng }) {
@@ -187,7 +191,8 @@ export const WEAPONS = {
     name: "Chain Lightning",
     color: "#e879f9",
     icon: "⚡",
-    maxLevel: 5,
+    maxLevel: 8,
+    evolveAt: 5,
     evolution: { requires: "fourleaf", name: "Storm Call", desc: "Jumps further, hits harder." },
     desc: (lvl) => `Chains to ${1 + lvl} enemies`,
     update({ world, player, ws, dt, stats, rng }) {
@@ -224,7 +229,8 @@ export const WEAPONS = {
     name: "Turret Drone",
     color: "#a78bfa",
     icon: "◈",
-    maxLevel: 5,
+    maxLevel: 8,
+    evolveAt: 5,
     evolution: { requires: "treads", name: "Twin Turret", desc: "Drones orbit faster and fire twice as often." },
     desc: (lvl) => `${1 + Math.floor(lvl / 3)} drone(s) auto-firing`,
     update({ world, player, ws, dt, stats, rng }) {

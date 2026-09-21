@@ -22,10 +22,14 @@ import { CHARACTERS, isCharacterUnlocked } from "./game/characters.js";
 import { updateEnemy, spawnEnemy } from "./game/enemies.js";
 import { updateBoss } from "./game/bosses.js";
 import { updateDirector } from "./game/director.js";
+import { updateAlly, updateAllySystem } from "./game/allies.js";
+import { updateWarDirector, startWarMode } from "./game/warmode.js";
 import { spawnXpGem, spawnGold, spawnHealth, spawnChest, spawnOverdrive, updatePickup } from "./game/pickups.js";
 import { unlockAchievement } from "./game/achievements.js";
 import { META_UPGRADES, upgradeCost, computeCoresEarned } from "./game/upgrades.js";
 import { generateOptions } from "./game/levelup-options.js";
+import { ASCENSION_TIERS, canAscend, ascend } from "./game/ascension.js";
+import { PASSIVE_LIST } from "./game/passives.js";
 
 import { setHudVisible, updateHud, showToast } from "./ui/hud.js";
 import {
@@ -39,6 +43,8 @@ import {
   renderSettings,
   renderArmory,
   renderAchievements,
+  renderAscension,
+  renderWarSetup,
   setMenuBestLabel,
 } from "./ui/screens.js";
 
@@ -59,6 +65,7 @@ const menuCtx = setupCanvas(menuCanvas);
 const camera = new Camera();
 const particles = new ParticleSystem();
 const enemyGrid = new SpatialGrid(90);
+const contactGrid = new SpatialGrid(90);
 
 audio.applySettings(meta.settings);
 particles.setDensity(meta.settings.particleDensity);
@@ -84,8 +91,11 @@ function onAchievementToast(def) {
 }
 
 // ---------------------------------------------------------------- flow
+let pendingWarEmpireCount = null;
+
 function goMenu() {
   gameState = "menu";
+  pendingWarEmpireCount = null;
   setHudVisible(false);
   setMenuBestLabel(meta);
   showScreen("screen-menu");
@@ -93,7 +103,15 @@ function goMenu() {
 
 function openCharSelect() {
   gameState = "charselect";
-  renderCharSelect(meta, (id) => startRun(id, { daily: false }));
+  renderCharSelect(meta, (id) => {
+    if (pendingWarEmpireCount) {
+      const empireCount = pendingWarEmpireCount;
+      pendingWarEmpireCount = null;
+      startRun(id, { war: true, empireCount });
+    } else {
+      startRun(id, { daily: false });
+    }
+  });
   showScreen("screen-charselect");
 }
 
@@ -176,29 +194,56 @@ function openAchievements() {
   showScreen("screen-achievements");
 }
 
-function startRun(charId, { daily = false } = {}) {
+function openAscension() {
+  gameState = "ascension";
+  renderAscension(meta, ASCENSION_TIERS);
+  showScreen("screen-ascension");
+}
+
+function openWarSetup() {
+  gameState = "warsetup";
+  renderWarSetup((empireCount) => {
+    pendingWarEmpireCount = empireCount;
+    openCharSelect();
+  });
+  showScreen("screen-warsetup");
+}
+
+function startRun(charId, { daily = false, war = false, empireCount = 4 } = {}) {
   charDef = CHARACTERS[charId];
   dailyMode = daily;
   const seed = daily ? dailySeedToday() : null;
-  world = createWorld(seed);
+  world = createWorld(seed, war ? "war" : "survival");
   world._onEnemyDamaged = (e) => {
     particles.spawnBurst(e.x, e.y, "#ffffff", 3, { speed: 80, life: 0.2 });
   };
   world._spawnRing = (x, y, r) => particles.spawnRing(x, y, "#f87171", { size: r, life: 0.5 });
+  world._onSupportPulse = (e, color) => particles.spawnRing(e.x, e.y, color, { size: 70, life: 0.4 });
   player = createPlayer(charDef, meta);
+  if (meta.ascensionLevel >= 3) {
+    const pick = PASSIVE_LIST[Math.floor(Math.random() * PASSIVE_LIST.length)];
+    addOrLevelPassive(player, pick.id);
+  }
   recomputeStats(player, meta, charDef);
   player.hp = player.maxHp;
+
+  if (war) startWarMode(world, empireCount);
 
   gameState = "playing";
   setHudVisible(true);
   hideAllScreens();
   audio.startMusic();
-  showToast(daily ? "Daily Challenge started" : `Deployed as ${charDef.name}`, charDef.color);
+  showToast(war ? `All-Out War: ${empireCount} empires` : daily ? "Daily Challenge started" : `Deployed as ${charDef.name}`, charDef.color);
 }
 
 function pauseGame() {
   if (gameState !== "playing") return;
   gameState = "paused";
+  const overloadBtn = document.getElementById("btn-overload");
+  if (overloadBtn) {
+    overloadBtn.dataset.confirming = "";
+    overloadBtn.textContent = "Overload Core (Ascend)";
+  }
   showScreen("screen-pause");
 }
 function resumeGame() {
@@ -215,8 +260,9 @@ function quitToMenu() {
 // ---------------------------------------------------------------- level up / chest
 function offerLevelUp() {
   gameState = "levelup";
-  const options = generateOptions(player, world.rng, 4);
-  world.rerollsLeft = world.rerollsLeft ?? 2;
+  const choiceCount = 4 + (meta.ascensionLevel >= 1 ? 1 : 0);
+  const options = generateOptions(player, world.rng, choiceCount);
+  world.rerollsLeft = world.rerollsLeft ?? 2 + (meta.ascensionLevel >= 2 ? 1 : 0);
   const show = () =>
     renderLevelUp(options, {
       level: player.level,
@@ -229,7 +275,7 @@ function offerLevelUp() {
       onReroll: () => {
         if (world.rerollsLeft <= 0) return;
         world.rerollsLeft -= 1;
-        const fresh = generateOptions(player, world.rng, 4);
+        const fresh = generateOptions(player, world.rng, choiceCount);
         options.length = 0;
         options.push(...fresh);
         show();
@@ -242,6 +288,11 @@ function offerLevelUp() {
 }
 
 function applyOption(opt) {
+  if (opt.kind === "overflow") {
+    player.overflowLevels[opt.id] = (player.overflowLevels[opt.id] || 0) + 1;
+    recomputeStats(player, meta, charDef);
+    return;
+  }
   if (opt.kind === "weapon") {
     const w = addOrLevelWeapon(player, opt.id);
     if (opt.isEvolution) {
@@ -302,7 +353,19 @@ function handlePlayerHit(amount) {
   if (player.hp <= 0) endRun(false);
 }
 
+const ALLY_LABELS = { drone: "Combat Drone", medic: "Field Medic", vanguard: "Vanguard" };
+function killAlly(e) {
+  e.active = false;
+  particles.spawnBurst(e.x, e.y, e.color, 14, { speed: 160 });
+  audio.sfxHit();
+  showToast(`${ALLY_LABELS[e.allyKind] || "Ally"} lost!`, "#f87171");
+}
+
 function killEnemy(e) {
+  if (e.isAlly) {
+    killAlly(e);
+    return;
+  }
   e.active = false;
   world.kills += 1;
   audio.sfxEnemyDeath();
@@ -318,7 +381,7 @@ function killEnemy(e) {
   if (e.splits && !e.noSplit) {
     for (let i = 0; i < 2; i++) {
       const ang = world.rng.range(0, TAU);
-      spawnEnemy(world, "runner", e.x + Math.cos(ang) * 20, e.y + Math.sin(ang) * 20);
+      spawnEnemy(world, "runner", e.x + Math.cos(ang) * 20, e.y + Math.sin(ang) * 20, e.faction);
       const child = world.enemies[world.enemies.length - 1];
       child.hp = child.maxHp = Math.max(3, e.maxHp * 0.35);
       child.dmg = e.dmg * 0.6;
@@ -352,16 +415,16 @@ bus.on("bossSlam", ({ x, y, dmg }) => {
   camera.kick(16, 0.32);
   particles.spawnBurst(x, y, "#f87171", 30, { speed: 260 });
 });
-bus.on("bossSummon", ({ x, y }) => {
+bus.on("bossSummon", ({ x, y, faction }) => {
   for (let i = 0; i < 3; i++) {
     const ang = world.rng.range(0, TAU);
-    spawnEnemy(world, "grunt", x + Math.cos(ang) * 60, y + Math.sin(ang) * 60);
+    spawnEnemy(world, "grunt", x + Math.cos(ang) * 60, y + Math.sin(ang) * 60, faction || "horde");
   }
   showToast("Reinforcements summoned!", "#4ade80");
 });
 
 // ---------------------------------------------------------------- end of run
-function endRun(victory) {
+function endRun(victory, opts = {}) {
   if (world.ended) return;
   world.ended = true;
   world.victory = victory;
@@ -392,16 +455,34 @@ function endRun(victory) {
   }
 
   writeSave(meta);
-  renderGameOver({ victory, world, coresEarned, newBestTime, newBestKills, player });
+  renderGameOver({
+    victory,
+    world,
+    coresEarned,
+    newBestTime,
+    newBestKills,
+    player,
+    selfDestruct: opts.selfDestruct,
+    ascendedTier: opts.ascendedTier,
+  });
   gameState = "gameover";
   setHudVisible(false);
   showScreen("screen-gameover");
 }
 
+function selfDestruct() {
+  if (gameState !== "playing" && gameState !== "paused") return;
+  const tier = canAscend(meta, player.level) ? ascend(meta, player.level) : null;
+  if (tier) showToast(`Ascended! Tier ${tier.tier}: ${tier.name}`, "#c084fc");
+  else showToast("Ascension requirement not met -- try a deeper run.", "#f87171");
+  writeSave(meta);
+  endRun(false, { selfDestruct: true, ascendedTier: tier });
+}
+
 // ---------------------------------------------------------------- main update
 function updatePlayerMovement(dt) {
   const mv = input.getMoveVector();
-  let speed = player.stats.moveSpeed;
+  let speed = player.stats.moveSpeed * (player.hazardSlow ?? 1);
   if (world.time < world.overdriveUntil) speed *= 1.3;
 
   player.dashCd = Math.max(0, player.dashCd - dt);
@@ -426,7 +507,7 @@ function updatePlayerMovement(dt) {
   player.invuln = Math.max(0, player.invuln - dt);
   player.hitFlash = Math.max(0, player.hitFlash - dt);
   let dmgMult = 1;
-  if (world.time < world.overdriveUntil) dmgMult = 1.5;
+  if (world.time < world.overdriveUntil) dmgMult = meta.ascensionLevel >= 9 ? 1.6 : 1.5;
   player.stats.runtimeDamageMult = dmgMult;
   player.hp = Math.min(player.maxHp, player.hp + player.stats.regen * dt);
 }
@@ -439,21 +520,58 @@ function updateWeapons(dt) {
   }
 }
 
+// Every combat unit's own AI/movement runs first; contact damage is then
+// resolved in a second pass over fresh post-movement positions, faction by
+// faction, so the same code handles horde-vs-player, horde-vs-ally, and (in
+// War Mode) empire-vs-empire contact instead of a player-only special case.
 function updateEnemiesAndContact(dt) {
   for (const e of world.enemies) {
     if (!e.active) continue;
     if (e.isBoss) updateBoss(e, world, dt, player);
+    else if (e.isAlly) updateAlly(e, world, dt, player);
     else updateEnemy(e, world, dt, player);
+  }
 
-    if (e.contactCooldown > 0) continue;
-    const d = dist(e.x, e.y, player.x, player.y);
-    if (d < e.radius + player.radius) {
-      e.contactCooldown = 0.5;
-      handlePlayerHit(e.dmg);
+  contactGrid.clear();
+  for (const e of world.enemies) if (e.active) contactGrid.insert(e);
+
+  for (const e of world.enemies) {
+    if (!e.active) continue;
+    if (e.contactCooldown > 0) {
+      e.contactCooldown -= dt;
+      continue;
+    }
+    if (!(e.dmg > 0)) continue;
+
+    if (e.faction !== player.faction) {
+      const dp = dist(e.x, e.y, player.x, player.y);
+      if (dp < e.radius + player.radius) {
+        e.contactCooldown = 0.5;
+        handlePlayerHit(e.dmg);
+        continue;
+      }
+    }
+
+    const nearby = contactGrid.queryCircle(e.x, e.y, e.radius + 40);
+    for (const o of nearby) {
+      if (o === e || !o.active || o.faction === e.faction) continue;
+      const dd = dist(e.x, e.y, o.x, o.y);
+      if (dd < e.radius + o.radius) {
+        e.contactCooldown = 0.5;
+        o.hp -= e.dmg;
+        o.hitFlash = 0.12;
+        particles.spawnBurst(o.x, o.y, e.color, 3, { speed: 100, life: 0.2 });
+        break;
+      }
     }
   }
 }
 
+// Collision resolves purely by faction comparison (b.sourceFaction vs the
+// candidate's .faction) rather than a hardcoded "player bullets hit
+// world.enemies, enemy bullets hit the player" split. That's what lets
+// ally-fired shots, horde shots, and War Mode's empire-vs-empire shots all
+// go through one path instead of three near-duplicate ones.
 function updateBullets(dt) {
   enemyGrid.clear();
   for (const e of world.enemies) if (e.active) enemyGrid.insert(e);
@@ -465,7 +583,7 @@ function updateBullets(dt) {
       let nearest = null,
         bestD = Infinity;
       for (const e of world.enemies) {
-        if (!e.active) continue;
+        if (!e.active || e.faction === b.sourceFaction) continue;
         const d = (e.x - b.x) ** 2 + (e.y - b.y) ** 2;
         if (d < bestD) {
           bestD = d;
@@ -492,17 +610,15 @@ function updateBullets(dt) {
       continue;
     }
 
-    if (b.hostile) {
-      if (player.invuln <= 0 && dist(b.x, b.y, player.x, player.y) < b.radius + player.radius) {
-        handlePlayerHit(b.dmg);
-        b.active = false;
-      }
+    if (player.faction !== b.sourceFaction && player.invuln <= 0 && dist(b.x, b.y, player.x, player.y) < b.radius + player.radius) {
+      handlePlayerHit(b.dmg);
+      b.active = false;
       continue;
     }
 
     const candidates = enemyGrid.queryCircle(b.x, b.y, b.radius + 40);
     for (const e of candidates) {
-      if (!e.active || b._hitSet.has(e.id)) continue;
+      if (!e.active || e.faction === b.sourceFaction || b._hitSet.has(e.id)) continue;
       const rr = b.radius + e.radius;
       if ((b.x - e.x) ** 2 + (b.y - e.y) ** 2 > rr * rr) continue;
 
@@ -512,10 +628,13 @@ function updateBullets(dt) {
       if (b.aoeRadius > 0) {
         const aoeCandidates = enemyGrid.queryCircle(b.x, b.y, b.aoeRadius + 40);
         for (const e2 of aoeCandidates) {
-          if (!e2.active || e2 === e) continue;
+          if (!e2.active || e2 === e || e2.faction === b.sourceFaction) continue;
           if ((b.x - e2.x) ** 2 + (b.y - e2.y) ** 2 <= b.aoeRadius * b.aoeRadius) {
             applyBulletDamage(e2, { ...b, dmg: b.dmg * 0.7, crit: false });
           }
+        }
+        if (player.faction !== b.sourceFaction && player.invuln <= 0 && dist(b.x, b.y, player.x, player.y) <= b.aoeRadius) {
+          handlePlayerHit(b.dmg * 0.7);
         }
         particles.spawnRing(b.x, b.y, "#fb923c", { size: b.aoeRadius, life: 0.35 });
         camera.kick(5, 0.12);
@@ -555,7 +674,7 @@ function updatePickups(dt) {
       openChest(p);
       break; // game is now paused on the chest screen; nothing else to process this frame
     } else if (p.kind === "overdrive") {
-      world.overdriveUntil = world.time + 8;
+      world.overdriveUntil = world.time + 8 + (meta.ascensionLevel >= 9 ? 5 : 0);
       showToast("OVERDRIVE!", "#f97316");
       camera.pulseZoom(0.15);
       audio.sfxLevelUp();
@@ -565,11 +684,33 @@ function updatePickups(dt) {
   world.pickups = world.pickups.filter((p) => p.active);
 }
 
+function updateHazards(dt) {
+  let inHazard = false;
+  for (const h of world.hazards) {
+    if (!h.active) continue;
+    if (world.time >= h.expiresAt) {
+      h.active = false;
+      continue;
+    }
+    if (dist(player.x, player.y, h.x, h.y) < h.radius + player.radius) {
+      inHazard = true;
+      player.hp = Math.max(0, player.hp - h.dps * dt);
+      player.hazardSlow = h.slowMult;
+      if (world.rng.chance(0.15)) particles.spawnBurst(player.x, player.y, h.color, 1, { speed: 40, life: 0.2 });
+    }
+  }
+  if (!inHazard) player.hazardSlow = 1;
+  world.hazards = world.hazards.filter((h) => h.active);
+}
+
 function updateGame(dt) {
   if (world.ended) return;
-  updateDirector(world, dt, player);
+  if (world.mode === "war") updateWarDirector(world, dt, player);
+  else updateDirector(world, dt, player);
   updatePlayerMovement(dt);
+  updateHazards(dt);
   updateWeapons(dt);
+  updateAllySystem(world, dt, player);
   updateEnemiesAndContact(dt);
   updateBullets(dt);
 
@@ -640,6 +781,27 @@ function renderWorld() {
     ctx.stroke();
   }
 
+  // hazards (drawn under everything else -- environmental danger zones)
+  for (const h of world.hazards) {
+    if (!h.active) continue;
+    const remain = clamp((h.expiresAt - world.time) / (h.expiresAt - h.createdAt || 1), 0, 1);
+    const pulse = 0.55 + 0.25 * Math.sin(world.time * 6);
+    ctx.save();
+    ctx.globalAlpha = 0.22 + 0.15 * pulse;
+    ctx.fillStyle = h.color;
+    ctx.beginPath();
+    ctx.arc(h.x, h.y, h.radius, 0, TAU);
+    ctx.fill();
+    ctx.globalAlpha = 0.7;
+    ctx.strokeStyle = h.color;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 6]);
+    ctx.beginPath();
+    ctx.arc(h.x, h.y, h.radius * (0.85 + 0.05 * remain), 0, TAU * remain);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   // pickups
   for (const p of world.pickups) {
     if (!p.active) continue;
@@ -676,7 +838,7 @@ function renderWorld() {
   }
   ctx.shadowBlur = 0;
 
-  // enemies
+  // enemies + allies (share one array/loop; isAlly flag picks styling)
   for (const e of world.enemies) {
     if (!e.active) continue;
     const flashT = clamp(e.hitFlash / 0.1, 0, 1);
@@ -686,6 +848,13 @@ function renderWorld() {
     if (e.elite || e.isBoss) {
       ctx.shadowColor = e.color;
       ctx.shadowBlur = e.isBoss ? 26 : 14;
+    }
+    if (e.isAlly) {
+      ctx.strokeStyle = "rgba(125,211,252,0.85)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, e.radius + 4, 0, TAU);
+      ctx.stroke();
     }
     drawEntityGlow(ctx, 0, 0, e.radius, color);
     ctx.shadowBlur = 0;
@@ -704,6 +873,16 @@ function renderWorld() {
       ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.arc(e.telegraph.x, e.telegraph.y, e.telegraph.radius * (1 - t * 0.15), 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    } else if (e.telegraph?.kind === "snipe") {
+      ctx.save();
+      ctx.strokeStyle = `rgba(250,204,21,${0.35 + 0.4 * (1 - e.telegraph.t / 1.1)})`;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.moveTo(e.x, e.y);
+      ctx.lineTo(e.telegraph.x, e.telegraph.y);
       ctx.stroke();
       ctx.restore();
     }
@@ -875,15 +1054,28 @@ startLoop((dt, now) => {
   input.consumeFrame();
 
   if (window.__NOVA_DEBUG__) {
+    const typeTally = {};
+    let allyCount = 0;
+    for (const e of world?.enemies || []) {
+      if (!e.active) continue;
+      if (e.isAlly) allyCount++;
+      else typeTally[e.type] = (typeTally[e.type] || 0) + 1;
+    }
     window.__NOVA_DEBUG__ = {
       gameState,
+      mode: world?.mode,
       time: world?.time,
       enemyCount: world?.enemies?.length,
+      enemyTypes: typeTally,
+      allyCount,
+      hazardCount: world?.hazards?.filter((h) => h.active).length,
       bulletActive: world?.bullets?.filter((b) => b.active).length,
       kills: world?.kills,
       playerHp: player?.hp,
       playerPos: player ? { x: player.x, y: player.y } : null,
       weapons: player?.weapons?.map((w) => ({ id: w.id, level: w.level, extra: !!w._blades })),
+      ascensionLevel: meta.ascensionLevel,
+      empires: world?.empires?.map((emp) => ({ id: emp.id, alive: emp.alive })),
     };
   }
 });
@@ -895,6 +1087,8 @@ initScreens({
   daily: openDaily,
   armory: openArmory,
   achievements: openAchievements,
+  ascension: openAscension,
+  warmode: openWarSetup,
   settings: () => openSettings(gameState),
   "back-to-menu": goMenu,
   back: () => {
@@ -909,6 +1103,14 @@ initScreens({
   "quit-to-menu": quitToMenu,
   retry: () => startRun(charDef.id, { daily: dailyMode }),
   quit: () => window.electronAPI?.quit(),
+  overload: (btn) => {
+    if (btn.dataset.confirming === "1") {
+      selfDestruct();
+    } else {
+      btn.dataset.confirming = "1";
+      btn.textContent = "Confirm? This ends the run.";
+    }
+  },
 });
 
 document.getElementById("btn-pause").addEventListener("click", pauseGame);

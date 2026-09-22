@@ -176,6 +176,68 @@ player) and the mode was locked to a fixed 2/3/4 choice.
   is a genuine nightmare without ever turning into an unplayable slideshow
   or an unwinnable HP wall.
 
+## v1.3.0: Cyberpunk reskin, bigger ranged threats, and the Mimic
+
+Three independent player-facing asks, addressed without touching any
+archetype/weapon/passive `id` (so meta-progression, achievements, and save
+data all stay valid across the update):
+
+- **Cyberpunk aesthetic pass.** New neon palette (`style.css` root
+  variables: electric cyan `--accent`, magenta `--accent2`, violet
+  `--accent3`, hot-pink `--danger`) replaces the old blue/purple/slate
+  theme across every screen, HUD bar, and button, plus a system-monospace
+  font stack (`--font-mono`, entirely self-hosted -- no external font
+  fetches, so the CSP's `style-src 'self' 'unsafe-inline'` needs no
+  loosening) and a flickering neon gradient on the title. A new
+  `#scanlines` div (pure CSS `repeating-linear-gradient`, `pointer-events:
+  none`, `mix-blend-mode: screen`) adds a CRT/terminal texture with zero
+  per-frame canvas cost. In-run rendering (arena ring, background grid,
+  menu starfield) was retinted to match; individual enemy/weapon/boss
+  colors were left alone since they already read as neon against the new,
+  much darker background -- retuning ~30 gameplay-entity colors for a
+  marginal gain wasn't worth the regression risk of touching that many
+  values in one pass.
+- **Bigger ranged enemies hit harder and faster, as a rule, not a
+  one-off.** `fireHostileBolt` in `enemies.js` now computes `sizeScale =
+  radius / REF_RANGED_RADIUS` (13, the Shooter's radius -- the baseline
+  ranged unit) and scales every hostile bolt's speed and damage off it.
+  This applies uniformly to every ranged behavior (`ranged`, `gatling`,
+  `sniper`, `launcher`), so it's one rule instead of per-archetype
+  tuning, and it means even an elite's enlarged radius (1.35x) now also
+  quietly buffs its shots -- reinforcing "big enemy, big threat" as a
+  single readable visual language. Three new ranged archetypes were added
+  to actually showcase the range of sizes: **Skirmisher** (small, radius
+  9, weak/fast), **Heavy Gunner** (bulked-up Gatling, radius 22), and
+  **Siege Cannon** (radius 30, near-hitscan shells, the biggest ranged
+  threat in the game). All three spawn at ordinary director weight-table
+  rates from early-to-mid game onward, in both Survival and War Mode.
+- **The Mimic.** A regular enemy (`enemies.js`) and a boss variant "Mimic
+  Overlord" (`bosses.js`, in the normal 4-boss rotation alongside
+  Colossus/Swarm Queen/Void Lancer) that snapshots the *real* player's
+  current weapon loadout (id/level/evolved) at spawn time and fights with
+  all of it. Neither spawn path is gated behind the elite roll or any
+  rarity mechanic -- it appears at normal weighted rates like every other
+  archetype, per the explicit "not a rare enemy" requirement. Implementation
+  lives in the new `mimic.js`, shared by both the regular and boss variant,
+  rather than reusing `weapons.js`'s `WEAPONS[id].update()` directly: those
+  functions assume `player` is the real player hunting `world.enemies`
+  (`nearestEnemy()` explicitly filters out faction `"player"`), which is
+  exactly backwards for something that has to hunt the real player instead.
+  Each copied weapon is re-expressed as a small flavor entry (damage/
+  cooldown/range coefficients, keyed by weapon id) driven off the Mimic's
+  own already-scaled `dmg` stat -- the same pattern every other ranged
+  archetype already uses to derive its shot damage from `e.dmg`. Bullet-
+  based copies (Blaster, Missile, Lightning, Drone) reuse the existing
+  faction-aware bullet pipeline outright; direct-damage copies (Orbiter,
+  Nova) tick damage into nearby hostiles via `isHostileFaction` and reach
+  the real player through a new `world._onMimicPulseHit` callback, following
+  the same `world._onXxx` hook pattern `main.js` already registers for
+  particle/audio side effects (`_onEnemyDamaged`, `_spawnRing`,
+  `_onSupportPulse`) rather than adding a bespoke direct-damage path. It
+  renders with the player's own ship silhouette (not a plain circle) in
+  the player's own character color, snapshotted at spawn, so it visually
+  reads as "a copy of you" rather than just another enemy type.
+
 ## Deliberately out of scope
 
 - Custom-drawn sprite art / hand-authored music (procedural instead, to

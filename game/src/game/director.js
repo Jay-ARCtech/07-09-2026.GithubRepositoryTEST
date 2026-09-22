@@ -1,4 +1,4 @@
-import { spawnEnemy } from "./enemies.js";
+import { spawnEnemy, spawnMimicEnemy } from "./enemies.js";
 import { spawnBoss, BOSS_TYPES } from "./bosses.js";
 import { spawnChest, spawnOverdrive } from "./pickups.js";
 import { TAU } from "../engine/utils.js";
@@ -8,8 +8,9 @@ const BOSS_INTERVAL = 4.5 * 60;
 
 function weightTableForTime(t) {
   if (t < 60) return { grunt: 70, runner: 30 };
-  if (t < 150) return { grunt: 50, runner: 25, tank: 15, shooter: 10 };
-  if (t < 300) return { grunt: 32, runner: 18, tank: 18, shooter: 12, splitter: 10, gatling: 6, healer: 4 };
+  if (t < 150) return { grunt: 50, runner: 25, tank: 15, shooter: 10, skirmisher: 8, mimic: 5 };
+  if (t < 300)
+    return { grunt: 32, runner: 18, tank: 18, shooter: 12, splitter: 10, gatling: 6, healer: 4, skirmisher: 8, heavyGunner: 6, mimic: 7 };
   if (t < 480)
     return {
       grunt: 22,
@@ -23,6 +24,10 @@ function weightTableForTime(t) {
       healer: 5,
       summoner: 5,
       engineer: 4,
+      skirmisher: 8,
+      heavyGunner: 7,
+      siegeCannon: 5,
+      mimic: 8,
     };
   return {
     grunt: 16,
@@ -36,6 +41,10 @@ function weightTableForTime(t) {
     healer: 6,
     summoner: 6,
     engineer: 5,
+    skirmisher: 8,
+    heavyGunner: 8,
+    siegeCannon: 6,
+    mimic: 9,
   };
 }
 
@@ -63,7 +72,10 @@ function spawnBatch(world, player) {
     const type = weightedPick(world.rng, table);
     const ang = world.rng.range(0, TAU);
     const r = world.rng.range(650, 850);
-    spawnEnemy(world, type, player.x + Math.cos(ang) * r, player.y + Math.sin(ang) * r);
+    const x = player.x + Math.cos(ang) * r,
+      y = player.y + Math.sin(ang) * r;
+    if (type === "mimic") spawnMimicEnemy(world, x, y, player);
+    else spawnEnemy(world, type, x, y);
   }
 }
 
@@ -80,7 +92,7 @@ export function updateDirector(world, dt, player) {
 
   if (!world.bossActive && world.time >= world.nextBossAt) {
     const idx = world.bossesKilled % BOSS_IDS.length;
-    spawnBoss(world, BOSS_IDS[idx]);
+    spawnBoss(world, BOSS_IDS[idx], { player });
     world.nextBossAt = world.time + BOSS_INTERVAL;
   }
 

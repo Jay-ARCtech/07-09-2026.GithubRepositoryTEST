@@ -1,5 +1,6 @@
 import { allocId, spawnBullet, clampToArena, findNearestHostile, spawnHazard } from "./world.js";
 import { angleTo, dist, TAU } from "../engine/utils.js";
+import { updateMimicCombat, mimicPreferredRange } from "./mimic.js";
 
 // Every non-boss hostile archetype. `behavior` selects the AI routine in
 // updateEnemy below. Support types (heal/summon/hazard) deliberately have
@@ -106,6 +107,42 @@ export const ENEMY_TYPES = {
     behavior: "launcher",
     desc: "Lobs a slow grenade that explodes in an area on impact. Dangerous to stand still near.",
   },
+  skirmisher: {
+    name: "Skirmisher",
+    icon: "∴",
+    hp: 8,
+    speed: 120,
+    dmg: 3,
+    radius: 9,
+    xp: 4,
+    color: "#67e8f9",
+    behavior: "ranged",
+    desc: "The smallest ranged unit in the horde -- quick and cheap, but its bolts are the weakest and slowest around. Size cuts both ways.",
+  },
+  heavyGunner: {
+    name: "Heavy Gunner",
+    icon: "▤",
+    hp: 34,
+    speed: 50,
+    dmg: 9,
+    radius: 22,
+    xp: 10,
+    color: "#fb7185",
+    behavior: "gatling",
+    desc: "A bulked-up gatling unit. Bigger than the standard Gatling Gunner, so its bursts fly noticeably faster and hit much harder -- size is a direct threat multiplier for ranged units.",
+  },
+  siegeCannon: {
+    name: "Siege Cannon",
+    icon: "◙",
+    hp: 46,
+    speed: 38,
+    dmg: 20,
+    radius: 30,
+    xp: 15,
+    color: "#fbbf24",
+    behavior: "launcher",
+    desc: "The largest ranged unit in the horde. Slow and lumbering, but its shells travel almost hitscan-fast and land devastating hits. Never let one sit still and line you up.",
+  },
 
   healer: {
     name: "Healer",
@@ -142,6 +179,19 @@ export const ENEMY_TYPES = {
     color: "#f472b6",
     behavior: "hazardSupport",
     desc: "Drops timed hazard zones that damage and slow you if you walk through them. Watch for the warning ring.",
+  },
+
+  mimic: {
+    name: "Mimic",
+    icon: "☻",
+    hp: 24,
+    speed: 100,
+    dmg: 6,
+    radius: 15,
+    xp: 11,
+    color: "#22d3ee",
+    behavior: "mimic",
+    desc: "A copy of you, spawned wearing whatever weapons you're currently running. It fights with every one of them at once -- you have to out-play your own build.",
   },
 };
 export const ENEMY_LIST = Object.entries(ENEMY_TYPES).map(([id, def]) => ({ id, ...def }));
@@ -190,14 +240,77 @@ export function spawnEnemy(world, typeId, x, y, faction = "horde") {
   return world.enemies[world.enemies.length - 1];
 }
 
+// Ranged enemies fire faster, harder shots the bigger their hitbox is.
+// REF_RANGED_RADIUS is the Shooter's radius -- the baseline ranged unit --
+// so anything at or below that size fires at "normal" speed/power, and
+// every bigger ranged archetype (Heavy Gunner, Siege Cannon, an elite's
+// enlarged radius, ...) scales up from there. This is a single, generic
+// rule applied at the point every hostile bolt is fired, rather than
+// hand-tuning per-archetype bullet stats.
+const REF_RANGED_RADIUS = 13;
+
+// The Mimic can't come from the generic spawnEnemy() above -- it needs the
+// real player's current weapon loadout to copy, which spawnEnemy has no
+// access to. Callers (director.js, warmode.js) special-case the "mimic"
+// type to call this instead, the same way they already have `player` in
+// scope for positioning spawns.
+export function spawnMimicEnemy(world, x, y, player, faction = "horde") {
+  const def = ENEMY_TYPES.mimic;
+  const t = world.time;
+  const scale = 1 + t / 90;
+  const weapons = (player.weapons && player.weapons.length ? player.weapons : [{ id: "blaster", level: 1, evolved: false }]).map((w) => ({
+    id: w.id,
+    level: w.level,
+    evolved: w.evolved,
+  }));
+  const passiveBoost = 1 + (player.passives?.length || 0) * 0.05;
+  const pos = clampToArena(world, x, y);
+  const mimic = {
+    id: allocId(),
+    active: true,
+    type: "mimic",
+    faction,
+    x: pos.x,
+    y: pos.y,
+    vx: 0,
+    vy: 0,
+    radius: def.radius,
+    hp: def.hp * scale * passiveBoost,
+    maxHp: def.hp * scale * passiveBoost,
+    speed: def.speed * (1 + Math.min(0.3, (player.passives?.length || 0) * 0.02)),
+    dmg: def.dmg * (1 + t / 400) * passiveBoost,
+    xpValue: Math.round(def.xp * (1 + t / 200)),
+    elite: false,
+    color: player.color || def.color,
+    behavior: "mimic",
+    mimicWeapons: weapons,
+    splits: false,
+    hitFlash: 0,
+    knockX: 0,
+    knockY: 0,
+    rangedTimer: 0,
+    burstCount: 0,
+    telegraph: null,
+    supportTimer: 0,
+    dot: null,
+    contactCooldown: 0,
+    slowUntil: 0,
+  };
+  world.enemies.push(mimic);
+  return mimic;
+}
+
 function fireHostileBolt(world, e, target, opts) {
   const ang = angleTo(e.x, e.y, target.x, target.y);
+  const sizeScale = Math.max(1, e.radius / REF_RANGED_RADIUS);
+  const speedBoost = 1 + (sizeScale - 1) * 0.5;
+  const dmgBoost = 1 + (sizeScale - 1) * 0.35;
   spawnBullet(world, {
     x: e.x,
     y: e.y,
-    vx: Math.cos(ang) * (opts.speed ?? 260),
-    vy: Math.sin(ang) * (opts.speed ?? 260),
-    dmg: opts.dmg ?? e.dmg,
+    vx: Math.cos(ang) * (opts.speed ?? 260) * speedBoost,
+    vy: Math.sin(ang) * (opts.speed ?? 260) * speedBoost,
+    dmg: (opts.dmg ?? e.dmg) * dmgBoost,
     radius: opts.radius ?? 5,
     life: opts.life ?? 3,
     color: opts.color ?? e.color,
@@ -325,6 +438,15 @@ export function updateEnemy(e, world, dt, player) {
       const dropY = target.y + world.rng.range(-60, 60);
       spawnHazard(world, dropX, dropY, { radius: 85, dps: 9, slowMult: 0.5, duration: 6, color: "#f472b6" });
     }
+  } else if (e.behavior === "mimic") {
+    const preferred = mimicPreferredRange(e.mimicWeapons);
+    if (preferred <= 60) {
+      e.vx = dirX * e.speed * speedMult;
+      e.vy = dirY * e.speed * speedMult;
+    } else {
+      keepDistanceMove(e, target, d, dirX, dirY, preferred, 130);
+    }
+    updateMimicCombat(e, world, dt, player, target);
   } else {
     e.vx = dirX * e.speed * speedMult;
     e.vy = dirY * e.speed * speedMult;

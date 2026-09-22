@@ -7,7 +7,7 @@
 // thin them out, every troop from every empire is a threat you personally
 // have to deal with, which is what makes higher empire counts brutal.
 import { spawnBoss, BOSS_TYPES } from "./bosses.js";
-import { spawnEnemy } from "./enemies.js";
+import { spawnEnemy, spawnMimicEnemy } from "./enemies.js";
 import { spawnChest, spawnOverdrive } from "./pickups.js";
 import { TAU } from "../engine/utils.js";
 
@@ -23,7 +23,7 @@ export const MAX_EMPIRES = 6;
 // this is what keeps 5-6 empires "a nightmare" rather than "a slideshow".
 const WAR_ENEMY_CAP = 240;
 
-export function startWarMode(world, empireCount) {
+export function startWarMode(world, empireCount, player) {
   world.empires = [];
   const n = Math.max(MIN_EMPIRES, Math.min(MAX_EMPIRES, empireCount));
   // Total boss HP/dmg budget stays roughly flat past 4 empires (hpScale*n
@@ -48,6 +48,7 @@ export function startWarMode(world, empireCount) {
       name: `${BOSS_TYPES[bossType].name} (Empire ${i + 1})`,
       empireId: faction,
       silent: true, // War Mode shows every boss, not a single "active" one
+      player,
     });
     world.empires.push({ id: faction, bossId: boss.id, alive: true, spawnX: x, spawnY: y, nextSpawnAt: 3 });
   }
@@ -66,8 +67,8 @@ function weightedPick(rng, table) {
 }
 
 function empireWeightTable(t) {
-  if (t < 120) return { grunt: 45, runner: 20, shooter: 18, gatling: 10, tank: 7 };
-  return { grunt: 28, runner: 16, shooter: 16, gatling: 14, tank: 10, sniper: 8, launcher: 8 };
+  if (t < 120) return { grunt: 45, runner: 20, shooter: 18, gatling: 10, tank: 7, skirmisher: 10, mimic: 5 };
+  return { grunt: 28, runner: 16, shooter: 16, gatling: 14, tank: 10, sniper: 8, launcher: 8, skirmisher: 10, heavyGunner: 8, mimic: 7 };
 }
 
 export function updateWarDirector(world, dt, player) {
@@ -89,7 +90,10 @@ export function updateWarDirector(world, dt, player) {
         const type = weightedPick(world.rng, table);
         const ang = world.rng.range(0, TAU);
         const r = world.rng.range(90, 220);
-        spawnEnemy(world, type, boss.x + Math.cos(ang) * r, boss.y + Math.sin(ang) * r, emp.id);
+        const x = boss.x + Math.cos(ang) * r,
+          y = boss.y + Math.sin(ang) * r;
+        if (type === "mimic") spawnMimicEnemy(world, x, y, player, emp.id);
+        else spawnEnemy(world, type, x, y, emp.id);
       }
     }
   }

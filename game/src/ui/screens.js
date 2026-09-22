@@ -441,7 +441,14 @@ export function renderCodex(meta, onAllyUpgrade) {
       icon: enemy.icon,
       name: enemy.name,
       desc: enemy.desc,
-      meta: enemy.behavior === "seek" ? "Melee" : enemy.behavior.startsWith("heal") || enemy.behavior.startsWith("summon") || enemy.behavior.startsWith("hazard") ? "Support" : "Ranged",
+      meta:
+        enemy.behavior === "seek"
+          ? "Melee"
+          : enemy.behavior === "mimic"
+            ? "Mirror"
+            : enemy.behavior.startsWith("heal") || enemy.behavior.startsWith("summon") || enemy.behavior.startsWith("hazard")
+              ? "Support"
+              : "Ranged",
       accent: enemy.color,
     });
     enemyGrid.appendChild(card);

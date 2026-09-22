@@ -2,6 +2,7 @@ import { allocId, spawnBullet, clampToArena, findNearestHostile, isHostileFactio
 import { angleTo, TAU } from "../engine/utils.js";
 import { bus } from "../engine/bus.js";
 import { audio } from "../engine/audio.js";
+import { updateMimicCombat, mimicPreferredRange } from "./mimic.js";
 
 // Three boss templates with distinct, telegraphed attack patterns so
 // fights read as fair -- every big hit gives the player a visible
@@ -37,6 +38,16 @@ export const BOSS_TYPES = {
     speed: 90,
     pattern: "spread",
     desc: "Fires a full-circle spread of bolts on a short cooldown. Keep moving; there's no safe spot that stays safe.",
+  },
+  mimic: {
+    name: "Mimic Overlord",
+    icon: "☻",
+    color: "#22d3ee",
+    radius: 40,
+    hpBase: 750,
+    speed: 80,
+    pattern: "mimic",
+    desc: "A boss-scale copy of you, wielding every weapon you're currently running all at once. It's basically a mirror match -- except it never misses a beat.",
   },
 };
 export const BOSS_LIST = Object.entries(BOSS_TYPES).map(([id, def]) => ({ id, ...def }));
@@ -75,6 +86,18 @@ export function spawnBoss(world, typeId, opts = {}) {
     name: opts.name ?? def.name,
     empireId: opts.empireId ?? null,
   };
+  if (def.pattern === "mimic") {
+    // Same idea as spawnMimicEnemy() in enemies.js, boss-scale: snapshot the
+    // real player's current weapon loadout at spawn time so the fight is a
+    // mirror match against the build the player actually made.
+    const srcPlayer = opts.player;
+    boss.mimicWeapons = (srcPlayer?.weapons?.length ? srcPlayer.weapons : [{ id: "blaster", level: 1, evolved: false }]).map((w) => ({
+      id: w.id,
+      level: w.level,
+      evolved: w.evolved,
+    }));
+    boss.color = srcPlayer?.color || def.color;
+  }
   world.enemies.push(boss);
   if (!opts.silent) world.bossActive = boss;
   audio.sfxBossRoar();
@@ -151,6 +174,19 @@ export function updateBoss(e, world, dt, player) {
       }
       audio.sfxShoot("lightning");
     }
+  } else if (e.pattern === "mimic") {
+    const preferred = mimicPreferredRange(e.mimicWeapons);
+    if (preferred <= 60) {
+      if (d > 20) {
+        e.vx = Math.cos(ang) * e.speed;
+        e.vy = Math.sin(ang) * e.speed;
+      }
+    } else {
+      const move = d < preferred ? -1 : d > preferred + 150 ? 1 : 0.3;
+      e.vx = Math.cos(ang) * e.speed * move;
+      e.vy = Math.sin(ang) * e.speed * move;
+    }
+    updateMimicCombat(e, world, dt, player, target);
   }
 
   e.x += (e.vx + e.knockX) * dt;

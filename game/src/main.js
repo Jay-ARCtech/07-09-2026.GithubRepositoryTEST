@@ -238,6 +238,7 @@ function startRun(charId, { daily = false, war = false, empireCount = 4 } = {}) 
   };
   world._spawnRing = (x, y, r) => particles.spawnRing(x, y, "#f87171", { size: r, life: 0.5 });
   world._onSupportPulse = (e, color) => particles.spawnRing(e.x, e.y, color, { size: 70, life: 0.4 });
+  world._onMimicPulseHit = (dmg) => handlePlayerHit(dmg);
   player = createPlayer(charDef, meta);
   if (meta.ascensionLevel >= 3) {
     const pick = PASSIVE_LIST[Math.floor(Math.random() * PASSIVE_LIST.length)];
@@ -246,7 +247,7 @@ function startRun(charId, { daily = false, war = false, empireCount = 4 } = {}) 
   recomputeStats(player, meta, charDef);
   player.hp = player.maxHp;
 
-  if (war) startWarMode(world, empireCount);
+  if (war) startWarMode(world, empireCount, player);
 
   gameState = "playing";
   setHudVisible(true);
@@ -805,7 +806,7 @@ function drawEntityGlow(c, x, y, radius, color, alpha = 1) {
 function renderWorld() {
   const w = window.innerWidth,
     h = window.innerHeight;
-  ctx.fillStyle = "#060a12";
+  ctx.fillStyle = "#05030c";
   ctx.fillRect(0, 0, w, h);
   if (!world || !player) return;
 
@@ -816,13 +817,16 @@ function renderWorld() {
   ctx.translate(-player.x, -player.y);
 
   // arena boundary + soft grid for spatial readability
-  ctx.strokeStyle = "rgba(125,211,252,0.25)";
+  ctx.strokeStyle = "rgba(0,240,255,0.3)";
+  ctx.shadowColor = "rgba(0,240,255,0.6)";
+  ctx.shadowBlur = 12;
   ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.arc(0, 0, world.arenaRadius, 0, TAU);
   ctx.stroke();
+  ctx.shadowBlur = 0;
 
-  ctx.strokeStyle = "rgba(255,255,255,0.04)";
+  ctx.strokeStyle = "rgba(255,43,214,0.05)";
   ctx.lineWidth = 1;
   const gridSize = 120;
   const viewR = 900 / camera.zoom;
@@ -918,6 +922,20 @@ function renderWorld() {
     }
     drawEntityGlow(ctx, 0, 0, e.radius, color);
     ctx.shadowBlur = 0;
+    if (e.type === "mimic") {
+      // A Mimic is a copy of the player -- draw the same ship silhouette
+      // (rather than just a plain circle) so it reads as "this is you" at
+      // a glance instead of just another colored blob.
+      ctx.rotate(Math.atan2(e.vy, e.vx) || 0);
+      ctx.fillStyle = "#0b1220";
+      ctx.beginPath();
+      ctx.moveTo(e.radius * 0.95, 0);
+      ctx.lineTo(-e.radius * 0.45, e.radius * 0.62);
+      ctx.lineTo(-e.radius * 0.15, 0);
+      ctx.lineTo(-e.radius * 0.45, -e.radius * 0.62);
+      ctx.closePath();
+      ctx.fill();
+    }
     if (e.isBoss) {
       ctx.fillStyle = "#0b1220";
       ctx.font = "bold 12px sans-serif";
@@ -1079,18 +1097,20 @@ const stars = Array.from({ length: 140 }, () => ({
 function renderMenuBg(t) {
   const w = window.innerWidth,
     h = window.innerHeight;
-  menuCtx.fillStyle = "#070c16";
+  menuCtx.fillStyle = "#05030c";
   menuCtx.fillRect(0, 0, w, h);
   const grad = menuCtx.createRadialGradient(w * 0.5, h * 0.35, 0, w * 0.5, h * 0.35, Math.max(w, h) * 0.7);
-  grad.addColorStop(0, "rgba(125,211,252,0.10)");
-  grad.addColorStop(1, "rgba(7,12,22,0)");
+  grad.addColorStop(0, "rgba(124,58,237,0.14)");
+  grad.addColorStop(0.6, "rgba(255,43,214,0.05)");
+  grad.addColorStop(1, "rgba(5,3,12,0)");
   menuCtx.fillStyle = grad;
   menuCtx.fillRect(0, 0, w, h);
   for (const s of stars) {
     const x = s.x * w;
     const y = ((s.y + t * 0.02 * s.z) % 1) * h;
     const alpha = 0.4 + 0.6 * Math.abs(Math.sin(t * 1.5 + s.tw));
-    menuCtx.fillStyle = `rgba(200,220,255,${alpha * s.z})`;
+    const hue = s.tw > Math.PI ? "0,240,255" : "255,43,214";
+    menuCtx.fillStyle = `rgba(${hue},${alpha * s.z})`;
     menuCtx.fillRect(x, y, 1.6 * s.z, 1.6 * s.z);
   }
 }
@@ -1141,6 +1161,10 @@ startLoop((dt, now) => {
         return { id: emp.id, alive: emp.alive, bossHp: boss?.hp, bossMaxHp: boss?.maxHp, bossX: boss?.x, bossY: boss?.y };
       }),
       allyDeadCount: world?.allyDeadCount ? { ...world.allyDeadCount } : null,
+      mimicSample: (() => {
+        const m = world?.enemies?.find((e) => e.active && e.type === "mimic");
+        return m ? { isBoss: !!m.isBoss, hp: m.hp, maxHp: m.maxHp, weapons: m.mimicWeapons?.map((w) => w.id) } : null;
+      })(),
     };
   }
 });

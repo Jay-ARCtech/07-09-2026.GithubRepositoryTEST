@@ -17,6 +17,7 @@ export const BOSS_TYPES = {
     hpBase: 900,
     speed: 60,
     pattern: "slam",
+    shape: "fortress",
     desc: "Charges in and telegraphs a heavy ground slam with a visible radius warning. Get out of the circle before it lands.",
   },
   swarmQueen: {
@@ -27,6 +28,7 @@ export const BOSS_TYPES = {
     hpBase: 700,
     speed: 75,
     pattern: "summon",
+    shape: "queen",
     desc: "Kites at range while periodically summoning waves of Grunts. Kill it fast or the arena fills up.",
   },
   voidLancer: {
@@ -37,6 +39,7 @@ export const BOSS_TYPES = {
     hpBase: 800,
     speed: 90,
     pattern: "spread",
+    shape: "lancer",
     desc: "Fires a full-circle spread of bolts on a short cooldown. Keep moving; there's no safe spot that stays safe.",
   },
   mimic: {
@@ -47,6 +50,7 @@ export const BOSS_TYPES = {
     hpBase: 750,
     speed: 80,
     pattern: "mimic",
+    shape: "mimic",
     desc: "A boss-scale copy of you, wielding every weapon you're currently running all at once. It's basically a mirror match -- except it never misses a beat.",
   },
 };

@@ -238,6 +238,50 @@ data all stay valid across the update):
   the player's own character color, snapshotted at spawn, so it visually
   reads as "a copy of you" rather than just another enemy type.
 
+## v1.4.0: Night City art pass -- from palette to actual scenery and silhouettes
+
+Direct player feedback on v1.3.0: the cyberpunk pass was "just dots and shapes
+and colors" with a neon coat of paint -- the ask was for the game to actually
+look like Night City (Cyberpunk 2077's setting), not just be tinted like it.
+This pass rebuilds what's actually drawn on the canvas, not just its colors,
+entirely in `src/engine/scenery.js` (new module) plus the render calls in
+`main.js` that use it:
+
+- **A real skyline, not a starfield.** The menu background (`drawCitySkyline`)
+  is a procedurally generated building skyline -- ~22 buildings of varying
+  height with individually flickering lit windows, a tall "megacorp" tower
+  with a sweeping magenta holographic beam, a street-level neon reflection
+  line, and falling rain streaks in place of the old twinkling stars. Built
+  once from a fixed seed (not regenerated per frame), so it's static art, not
+  a per-frame cost.
+- **The arena is a rooftop/street battlefield, not a bare circle.** Seven
+  holographic billboards (glowing rectangles with animated abstract "ad" data
+  bars) and ten glowing containment pylons ring the play space
+  (`buildArenaScenery`/`drawArenaGround`), plus a handful of drifting distant
+  light glints just outside the boundary implying the rest of the city is out
+  there. Placement is seeded from `world.seed` through its *own* RNG instance
+  -- never `world.rng` -- because consuming rolls from the gameplay RNG
+  stream for decorative purposes would silently change enemy spawns/loot for
+  a given seed and break Daily Challenge reproducibility.
+- **Every unit is a silhouette, not a dot.** `ENEMY_TYPES`/`BOSS_TYPES` now
+  carry a `shape` field (`swarm`, `heavy`, `gunner`, `sniper`, `launcher`,
+  `healer`, `summoner`, `engineer`, `mimic`/`operator`, plus boss-only
+  `fortress`/`queen`/`lancer`) that `drawUnitShape`/`drawBossShape` in
+  scenery.js dispatch on: melee swarm units are angular diamonds with a
+  single "eye," gunners get a barrel pointed along their travel direction,
+  support units carry a distinct glyph (cross/antenna/gear), and each boss
+  has a motif matching its name -- Colossus is a spiked hex fortress, Swarm
+  Queen has orbiting petal nodes, Void Lancer is a blade silhouette. The
+  player and the Mimic share one "operator" ship-hull shape (a dark
+  silhouette over their own glow disc), which is the whole point of the
+  Mimic. Bullets are stretched glowing tracers along their travel direction
+  instead of plain circles.
+- Every enemy/boss/ally archetype was already a small, fixed set (`shape` is
+  a lookup field, not per-instance data), so this added zero new gameplay
+  state and no measurable per-frame cost beyond a handful more canvas path
+  calls per visible unit -- verified by the same up-to-6-empire War Mode
+  playtest used for prior passes, with zero console/page errors.
+
 ## Deliberately out of scope
 
 - Custom-drawn sprite art / hand-authored music (procedural instead, to

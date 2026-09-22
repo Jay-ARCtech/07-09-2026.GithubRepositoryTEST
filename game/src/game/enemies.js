@@ -19,6 +19,7 @@ export const ENEMY_TYPES = {
     xp: 3,
     color: "#f87171",
     behavior: "seek",
+    shape: "swarm",
     desc: "The core of the horde. Walks straight at you and hits on contact. Cheap alone, dangerous in numbers.",
   },
   runner: {
@@ -31,6 +32,7 @@ export const ENEMY_TYPES = {
     xp: 3,
     color: "#fb923c",
     behavior: "seek",
+    shape: "swarm",
     desc: "Fragile but fast -- outruns careless positioning. Also what Splitters leave behind when they die.",
   },
   tank: {
@@ -43,6 +45,7 @@ export const ENEMY_TYPES = {
     xp: 9,
     color: "#a3a3a3",
     behavior: "seek",
+    shape: "heavy",
     desc: "Slow, heavy, hits hard on contact. Worth focusing down before it catches up to you.",
   },
   shooter: {
@@ -55,6 +58,7 @@ export const ENEMY_TYPES = {
     xp: 5,
     color: "#e879f9",
     behavior: "ranged",
+    shape: "gunner",
     desc: "Basic all-rounder ranged enemy. Keeps its distance and fires single shots at you.",
   },
   splitter: {
@@ -67,6 +71,7 @@ export const ENEMY_TYPES = {
     xp: 6,
     color: "#4ade80",
     behavior: "seek",
+    shape: "swarm",
     splits: true,
     desc: "Breaks into two weaker Runners on death. Killing it doesn't end the fight, just changes its shape.",
   },
@@ -81,6 +86,7 @@ export const ENEMY_TYPES = {
     xp: 6,
     color: "#fb7185",
     behavior: "gatling",
+    shape: "gunner",
     desc: "Fires fast 3-round bursts at close-to-mid range. Low damage per hit, but it adds up if you linger.",
   },
   sniper: {
@@ -93,6 +99,7 @@ export const ENEMY_TYPES = {
     xp: 8,
     color: "#facc15",
     behavior: "sniper",
+    shape: "sniper",
     desc: "Telegraphs a long-range shot with a visible laser line, then fires one very hard hit. Break line of sight or move during the wind-up.",
   },
   launcher: {
@@ -105,6 +112,7 @@ export const ENEMY_TYPES = {
     xp: 8,
     color: "#f97316",
     behavior: "launcher",
+    shape: "launcher",
     desc: "Lobs a slow grenade that explodes in an area on impact. Dangerous to stand still near.",
   },
   skirmisher: {
@@ -117,6 +125,7 @@ export const ENEMY_TYPES = {
     xp: 4,
     color: "#67e8f9",
     behavior: "ranged",
+    shape: "gunner",
     desc: "The smallest ranged unit in the horde -- quick and cheap, but its bolts are the weakest and slowest around. Size cuts both ways.",
   },
   heavyGunner: {
@@ -129,6 +138,7 @@ export const ENEMY_TYPES = {
     xp: 10,
     color: "#fb7185",
     behavior: "gatling",
+    shape: "gunner",
     desc: "A bulked-up gatling unit. Bigger than the standard Gatling Gunner, so its bursts fly noticeably faster and hit much harder -- size is a direct threat multiplier for ranged units.",
   },
   siegeCannon: {
@@ -141,6 +151,7 @@ export const ENEMY_TYPES = {
     xp: 15,
     color: "#fbbf24",
     behavior: "launcher",
+    shape: "launcher",
     desc: "The largest ranged unit in the horde. Slow and lumbering, but its shells travel almost hitscan-fast and land devastating hits. Never let one sit still and line you up.",
   },
 
@@ -154,6 +165,7 @@ export const ENEMY_TYPES = {
     xp: 7,
     color: "#86efac",
     behavior: "healSupport",
+    shape: "healer",
     desc: "Keeps its distance and periodically heals nearby hostiles. Kill it first or the fight drags on forever.",
   },
   summoner: {
@@ -166,6 +178,7 @@ export const ENEMY_TYPES = {
     xp: 9,
     color: "#fbbf24",
     behavior: "summonSupport",
+    shape: "summoner",
     desc: "Calls in more Grunts and Shooters on a timer. Left alive, it snowballs the swarm.",
   },
   engineer: {
@@ -178,6 +191,7 @@ export const ENEMY_TYPES = {
     xp: 8,
     color: "#f472b6",
     behavior: "hazardSupport",
+    shape: "engineer",
     desc: "Drops timed hazard zones that damage and slow you if you walk through them. Watch for the warning ring.",
   },
 
@@ -191,6 +205,7 @@ export const ENEMY_TYPES = {
     xp: 11,
     color: "#22d3ee",
     behavior: "mimic",
+    shape: "mimic",
     desc: "A copy of you, spawned wearing whatever weapons you're currently running. It fights with every one of them at once -- you have to out-play your own build.",
   },
 };

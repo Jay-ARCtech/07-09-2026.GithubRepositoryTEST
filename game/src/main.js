@@ -19,11 +19,12 @@ import {
 import { WEAPONS } from "./game/weapons.js";
 import { PASSIVES } from "./game/passives.js";
 import { CHARACTERS, isCharacterUnlocked } from "./game/characters.js";
-import { updateEnemy, spawnEnemy } from "./game/enemies.js";
-import { updateBoss } from "./game/bosses.js";
+import { updateEnemy, spawnEnemy, ENEMY_TYPES } from "./game/enemies.js";
+import { updateBoss, BOSS_TYPES } from "./game/bosses.js";
 import { updateDirector } from "./game/director.js";
 import { updateAlly, updateAllySystem } from "./game/allies.js";
 import { updateWarDirector, startWarMode } from "./game/warmode.js";
+import { buildArenaScenery, drawArenaGround, drawUnitShape, drawBossShape, drawAllyShape, drawBulletTracer, drawCitySkyline } from "./engine/scenery.js";
 import { spawnXpGem, spawnGold, spawnHealth, spawnChest, spawnOverdrive, updatePickup } from "./game/pickups.js";
 import { unlockAchievement } from "./game/achievements.js";
 import { META_UPGRADES, ALLY_META_UPGRADES, upgradeCost, computeCoresEarned } from "./game/upgrades.js";
@@ -54,6 +55,7 @@ let meta = loadSave();
 let world = null;
 let player = null;
 let charDef = null;
+let scenery = null;
 let gameState = "menu"; // menu | charselect | playing | paused | levelup | chest | gameover | settings | armory | achievements
 let settingsReturnState = "menu";
 let dailyMode = false;
@@ -233,6 +235,7 @@ function startRun(charId, { daily = false, war = false, empireCount = 4 } = {}) 
   dailyMode = daily;
   const seed = daily ? dailySeedToday() : null;
   world = createWorld(seed, war ? "war" : "survival");
+  scenery = buildArenaScenery(world);
   world._onEnemyDamaged = (e) => {
     particles.spawnBurst(e.x, e.y, "#ffffff", 3, { speed: 80, life: 0.2 });
   };
@@ -845,6 +848,10 @@ function renderWorld() {
     ctx.stroke();
   }
 
+  // holographic billboards, boundary pylons, and distant city light glints --
+  // turns the arena from a bare circle+grid into a rooftop/street battlefield.
+  if (scenery) drawArenaGround(ctx, world, scenery, world.time);
+
   // hazards (drawn under everything else -- environmental danger zones)
   for (const h of world.hazards) {
     if (!h.active) continue;
@@ -902,39 +909,41 @@ function renderWorld() {
   }
   ctx.shadowBlur = 0;
 
-  // enemies + allies (share one array/loop; isAlly flag picks styling)
+  // enemies + allies (share one array/loop; isAlly flag picks styling).
+  // Every unit is drawn as an armored mech/operator silhouette (via
+  // scenery.js's drawUnitShape/drawBossShape/drawAllyShape, keyed off the
+  // `shape` field ENEMY_TYPES/BOSS_TYPES carry) rather than a plain dot --
+  // a soft glow disc underneath keeps the "lit from within" neon read
+  // without hiding the silhouette detail drawn on top of it.
   for (const e of world.enemies) {
     if (!e.active) continue;
     const flashT = clamp(e.hitFlash / 0.1, 0, 1);
     const color = flashT > 0 ? mixWhite(e.color, flashT) : e.color;
+    const facing = Math.atan2(e.vy, e.vx) || 0;
     ctx.save();
     ctx.translate(e.x, e.y);
     if (e.elite || e.isBoss) {
       ctx.shadowColor = e.color;
       ctx.shadowBlur = e.isBoss ? 26 : 14;
     }
+    drawEntityGlow(ctx, 0, 0, e.radius * 1.15, color, e.isBoss || e.elite ? 0.55 : 0.35);
+    ctx.shadowBlur = 0;
+    const shape = e.isAlly ? null : (e.isBoss ? BOSS_TYPES[e.type]?.shape : ENEMY_TYPES[e.type]?.shape) ?? (e.isBoss ? "fortress" : "swarm");
+    // Ship-hull shapes (player/Mimic) are a dark silhouette over their own
+    // bright glow disc, not a solid fill in e.color like every other
+    // archetype -- matches how the real player renders.
+    const shapeColor = shape === "mimic" || shape === "operator" ? (flashT > 0 ? "#ffffff" : "#0b1220") : color;
     if (e.isAlly) {
-      ctx.strokeStyle = "rgba(125,211,252,0.85)";
+      ctx.strokeStyle = "rgba(0,240,255,0.85)";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(0, 0, e.radius + 4, 0, TAU);
+      ctx.arc(0, 0, e.radius + 5, 0, TAU);
       ctx.stroke();
-    }
-    drawEntityGlow(ctx, 0, 0, e.radius, color);
-    ctx.shadowBlur = 0;
-    if (e.type === "mimic") {
-      // A Mimic is a copy of the player -- draw the same ship silhouette
-      // (rather than just a plain circle) so it reads as "this is you" at
-      // a glance instead of just another colored blob.
-      ctx.rotate(Math.atan2(e.vy, e.vx) || 0);
-      ctx.fillStyle = "#0b1220";
-      ctx.beginPath();
-      ctx.moveTo(e.radius * 0.95, 0);
-      ctx.lineTo(-e.radius * 0.45, e.radius * 0.62);
-      ctx.lineTo(-e.radius * 0.15, 0);
-      ctx.lineTo(-e.radius * 0.45, -e.radius * 0.62);
-      ctx.closePath();
-      ctx.fill();
+      drawAllyShape(ctx, e.allyKind, e.radius, color, facing);
+    } else if (e.isBoss) {
+      drawBossShape(ctx, shape, e.radius, shapeColor, { time: world.time, facing });
+    } else {
+      drawUnitShape(ctx, shape, e.radius, shapeColor, { facing });
     }
     if (e.isBoss) {
       ctx.fillStyle = "#0b1220";
@@ -1036,38 +1045,25 @@ function renderWorld() {
     }
   }
 
-  // player
+  // player -- same "operator" silhouette family as the Mimic (which is
+  // literally supposed to look like a copy of you), just always in your
+  // chosen character's color rather than a snapshot of it.
   ctx.save();
   ctx.translate(player.x, player.y);
   const invulnFlicker = player.invuln > 0 && Math.floor(world.time * 20) % 2 === 0 ? 0.4 : 1;
   ctx.globalAlpha = invulnFlicker;
   ctx.shadowColor = charDef.color;
   ctx.shadowBlur = 18;
-  drawEntityGlow(ctx, 0, 0, player.radius, player.hitFlash > 0 ? "#ffffff" : charDef.color);
+  drawEntityGlow(ctx, 0, 0, player.radius * 1.15, charDef.color, 0.4);
   ctx.shadowBlur = 0;
-  ctx.rotate(player.facingAngle || 0);
-  ctx.fillStyle = "#0b1220";
-  ctx.beginPath();
-  ctx.moveTo(player.radius * 0.95, 0);
-  ctx.lineTo(-player.radius * 0.45, player.radius * 0.62);
-  ctx.lineTo(-player.radius * 0.15, 0);
-  ctx.lineTo(-player.radius * 0.45, -player.radius * 0.62);
-  ctx.closePath();
-  ctx.fill();
+  drawUnitShape(ctx, "operator", player.radius, player.hitFlash > 0 ? "#ffffff" : "#0b1220", { facing: player.facingAngle || 0 });
   ctx.globalAlpha = 1;
   ctx.restore();
 
-  // bullets
+  // bullets -- stretched glowing tracers along travel direction, not dots
   for (const b of world.bullets) {
     if (!b.active) continue;
-    ctx.save();
-    ctx.fillStyle = b.color;
-    ctx.shadowColor = b.color;
-    ctx.shadowBlur = 8;
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, b.radius, 0, TAU);
-    ctx.fill();
-    ctx.restore();
+    drawBulletTracer(ctx, b);
   }
   ctx.shadowBlur = 0;
 
@@ -1088,7 +1084,9 @@ function mixWhite(hex, t) {
 }
 
 // ---------------------------------------------------------------- menu bg
-const stars = Array.from({ length: 140 }, () => ({
+// Falling neon rain streaks over the skyline, rather than a plain twinkling
+// starfield -- reads as a rainy Night City rooftop view instead of open sky.
+const rainDrops = Array.from({ length: 90 }, () => ({
   x: Math.random(),
   y: Math.random(),
   z: 0.3 + Math.random() * 0.7,
@@ -1099,20 +1097,26 @@ function renderMenuBg(t) {
     h = window.innerHeight;
   menuCtx.fillStyle = "#05030c";
   menuCtx.fillRect(0, 0, w, h);
-  const grad = menuCtx.createRadialGradient(w * 0.5, h * 0.35, 0, w * 0.5, h * 0.35, Math.max(w, h) * 0.7);
-  grad.addColorStop(0, "rgba(124,58,237,0.14)");
+  drawCitySkyline(menuCtx, w, h, t);
+  for (const s of rainDrops) {
+    const x = s.x * w;
+    const y = ((s.y + t * 0.35 * s.z) % 1) * h;
+    const alpha = 0.25 + 0.35 * s.z;
+    const hue = s.tw > Math.PI ? "0,240,255" : "255,43,214";
+    const len = 10 + 14 * s.z;
+    menuCtx.strokeStyle = `rgba(${hue},${alpha})`;
+    menuCtx.lineWidth = 1.2 * s.z;
+    menuCtx.beginPath();
+    menuCtx.moveTo(x, y);
+    menuCtx.lineTo(x - 1.5, y + len);
+    menuCtx.stroke();
+  }
+  const grad = menuCtx.createRadialGradient(w * 0.5, h * 0.35, 0, w * 0.5, h * 0.35, Math.max(w, h) * 0.55);
+  grad.addColorStop(0, "rgba(124,58,237,0.16)");
   grad.addColorStop(0.6, "rgba(255,43,214,0.05)");
   grad.addColorStop(1, "rgba(5,3,12,0)");
   menuCtx.fillStyle = grad;
   menuCtx.fillRect(0, 0, w, h);
-  for (const s of stars) {
-    const x = s.x * w;
-    const y = ((s.y + t * 0.02 * s.z) % 1) * h;
-    const alpha = 0.4 + 0.6 * Math.abs(Math.sin(t * 1.5 + s.tw));
-    const hue = s.tw > Math.PI ? "0,240,255" : "255,43,214";
-    menuCtx.fillStyle = `rgba(${hue},${alpha * s.z})`;
-    menuCtx.fillRect(x, y, 1.6 * s.z, 1.6 * s.z);
-  }
 }
 
 // ---------------------------------------------------------------- loop

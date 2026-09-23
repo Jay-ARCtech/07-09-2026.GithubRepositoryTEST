@@ -120,7 +120,7 @@ export function updateWarDirector(world, dt, player) {
   }
 
   world._chestAccum = (world._chestAccum || 0) + dt;
-  if (world._chestAccum >= 40) {
+  if (world._chestAccum >= 40 / (1 + (player.stats.chestLuck || 0))) {
     world._chestAccum = 0;
     const ang = world.rng.range(0, TAU);
     spawnChest(world, player.x + Math.cos(ang) * 220, player.y + Math.sin(ang) * 220);

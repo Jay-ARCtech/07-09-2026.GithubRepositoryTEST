@@ -70,7 +70,10 @@ export function updateDirector(world, dt, player) {
   }
 
   world._chestAccum = (world._chestAccum || 0) + dt;
-  if (world._chestAccum >= 45) {
+  // Signal Flare/Salvager-style chestLuck shortens the interval rather than
+  // rolling a chance -- chests spawn on a fixed timer here, not an RNG
+  // check, so "more chests" has to mean "sooner chests".
+  if (world._chestAccum >= 45 / (1 + (player.stats.chestLuck || 0))) {
     world._chestAccum = 0;
     const ang = world.rng.range(0, TAU);
     spawnChest(world, player.x + Math.cos(ang) * 220, player.y + Math.sin(ang) * 220);

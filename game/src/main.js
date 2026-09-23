@@ -318,7 +318,7 @@ function offerLevelUp() {
   gameState = "levelup";
   const choiceCount = 4 + (meta.ascensionLevel >= 1 ? 1 : 0);
   const options = generateOptions(player, world.rng, choiceCount, { deadAllyCount: world.allyDeadCount });
-  world.rerollsLeft = world.rerollsLeft ?? 2 + (meta.ascensionLevel >= 2 ? 1 : 0);
+  world.rerollsLeft = world.rerollsLeft ?? 2 + (meta.ascensionLevel >= 2 ? 1 : 0) + Math.floor(player.stats.extraRerolls || 0);
   const show = () =>
     renderLevelUp(options, {
       level: player.level,
@@ -400,6 +400,10 @@ function openChest(chestEntity) {
 // ---------------------------------------------------------------- combat helpers
 function applyBulletDamage(e, b) {
   e.hp -= b.dmg;
+  // Only bullets tagged playerWeapon (fired by the player's own Blaster/
+  // Missiles/Turret Drone -- see weapons.js) trigger lifesteal, not ally-
+  // fired shots or a hostile mimic's copy of the player's weapons.
+  if (b.playerWeapon && player.stats.lifesteal) player.hp = Math.min(player.maxHp, player.hp + b.dmg * player.stats.lifesteal);
   e.hitFlash = 0.1;
   audio.sfxHit();
   particles.spawnBurst(e.x, e.y, b.color, 4, { speed: 120, life: 0.25 });
@@ -411,6 +415,14 @@ function applyBulletDamage(e, b) {
 }
 
 function handlePlayerHit(amount) {
+  // Dodge rolls against the gameplay RNG (not Math.random) so Daily
+  // Challenge stays seeded/reproducible. Deliberately not applied to hazard
+  // zone ticks (updateHazards damages the player directly) -- you can't
+  // "dodge" a DOT field you're already standing in.
+  if (player.stats.dodgeChance > 0 && world.rng.chance(player.stats.dodgeChance)) {
+    particles.spawnText(player.x, player.y - 20, "DODGE", "#67e8f9", { size: 12 });
+    return;
+  }
   const dealt = takeDamage(player, amount);
   if (dealt <= 0) return;
   camera.kick(7, 0.16);
@@ -418,6 +430,11 @@ function handlePlayerHit(amount) {
   audio.sfxHurt();
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
   for (const gp of pads) if (gp) input.vibrate(gp, 0.3, 0.6, 140);
+  // Combat Stims: taking a real hit while critically low grants a short
+  // speed/damage window (see updatePlayerMovement/updateWeapons).
+  if (player.stats.combatStimsSpeedBonus > 0 && player.hp / player.maxHp < 0.3) {
+    player._stimsUntil = world.time + 4;
+  }
   if (player.hp <= 0) endRun(false);
 }
 
@@ -575,6 +592,8 @@ function updatePlayerMovement(dt) {
   const mv = input.getMoveVector();
   let speed = player.stats.moveSpeed * (player.hazardSlow ?? 1);
   if (world.time < world.overdriveUntil) speed *= 1.3;
+  // Combat Stims: a short window after taking a hit while critically low.
+  if (world.time < (player._stimsUntil || 0)) speed *= 1 + (player.stats.combatStimsSpeedBonus || 0);
 
   player.dashCd = Math.max(0, player.dashCd - dt);
   if (player.dashing > 0) {
@@ -583,7 +602,7 @@ function updatePlayerMovement(dt) {
     if (world.rng.chance(0.6)) particles.spawnBurst(player.x, player.y, player.color, 1, { speed: 20, life: 0.3 });
   } else if (input.actions.dash && player.dashCd <= 0 && (mv.x || mv.y)) {
     player.dashing = 0.16;
-    player.dashCd = 2.4;
+    player.dashCd = 2.4 * (1 + (player.stats.dashCooldownMult || 0));
     player.invuln = Math.max(player.invuln, 0.22);
     audio.sfxUiClick();
   }
@@ -609,9 +628,11 @@ function updatePlayerMovement(dt) {
 }
 
 function updateWeapons(dt) {
+  const stimsActive = world.time < (player._stimsUntil || 0);
+  const stimsDmgMult = stimsActive ? 1 + (player.stats.combatStimsDmgBonus || 0) : 1;
   for (const w of player.weapons) {
     const def = WEAPONS[w.id];
-    const effectiveStats = { ...player.stats, damageMult: player.stats.damageMult * (player.stats.runtimeDamageMult || 1) };
+    const effectiveStats = { ...player.stats, damageMult: player.stats.damageMult * (player.stats.runtimeDamageMult || 1) * stimsDmgMult };
     def.update({ world, player, ws: w, dt, stats: effectiveStats, rng: world.rng });
   }
 }
@@ -728,11 +749,26 @@ function updateBullets(dt) {
       b._hitSet.add(e.id);
 
       if (b.aoeRadius > 0) {
+        // Impact Rounds/Kinetic Rebound only push harder on the player's
+        // own explosions (playerWeapon-tagged, e.g. Homing Missiles), never
+        // a hostile launcher/siege cannon blast hitting the player.
+        if (b.playerWeapon && player.stats.knockbackMult) {
+          const kb = 160 * player.stats.knockbackMult;
+          const d0 = Math.hypot(e.x - b.x, e.y - b.y) || 1;
+          e.knockX += ((e.x - b.x) / d0) * kb;
+          e.knockY += ((e.y - b.y) / d0) * kb;
+        }
         const aoeCandidates = enemyGrid.queryCircle(b.x, b.y, b.aoeRadius + 40);
         for (const e2 of aoeCandidates) {
           if (!e2.active || e2 === e || !isHostileFaction(b.sourceFaction, e2.faction)) continue;
           if ((b.x - e2.x) ** 2 + (b.y - e2.y) ** 2 <= b.aoeRadius * b.aoeRadius) {
             applyBulletDamage(e2, { ...b, dmg: b.dmg * 0.7, crit: false });
+            if (b.playerWeapon && player.stats.knockbackMult) {
+              const kb = 160 * player.stats.knockbackMult;
+              const d2 = Math.hypot(e2.x - b.x, e2.y - b.y) || 1;
+              e2.knockX += ((e2.x - b.x) / d2) * kb;
+              e2.knockY += ((e2.y - b.y) / d2) * kb;
+            }
           }
         }
         if (isHostileFaction(b.sourceFaction, player.faction) && player.invuln <= 0 && dist(b.x, b.y, player.x, player.y) <= b.aoeRadius) {
@@ -762,10 +798,10 @@ function updatePickups(dt) {
     if (d > player.radius + p.radius + 6) continue;
 
     if (p.kind === "xp") {
-      gainXp(player, p.value, offerLevelUp);
+      gainXp(player, p.value * (1 + (player.stats.xpGainMult || 0)), offerLevelUp);
       audio.sfxPickup();
     } else if (p.kind === "gold") {
-      world.coresEarned += p.value;
+      world.coresEarned += p.value * (1 + (player.stats.goldGainMult || 0));
       audio.sfxPickup();
       particles.spawnText(p.x, p.y - 10, `+${p.value}`, "#fbbf24", { size: 13 });
     } else if (p.kind === "health") {

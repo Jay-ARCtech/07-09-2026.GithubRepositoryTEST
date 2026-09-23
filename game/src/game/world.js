@@ -128,6 +128,12 @@ export function spawnBullet(world, opts) {
     // shots, horde shots, and (in War Mode) empire-vs-empire shots all
     // reuse the same collision code.
     sourceFaction: opts.sourceFaction ?? (opts.hostile ? "horde" : "player"),
+    // Set by the player's own Blaster/Missiles/Turret Drone (weapons.js) so
+    // applyBulletDamage (main.js) knows to trigger lifesteal -- ally-fired
+    // and hostile-fired bullets never set this, even though they can share
+    // sourceFaction "player" (an ally's shot) or come from a Mimic's copy of
+    // the player's own weapons.
+    playerWeapon: opts.playerWeapon ?? false,
   });
   b._hitSet = b._hitSet || new Set();
   b._hitSet.clear();

@@ -67,6 +67,16 @@ export function recomputeStats(player, meta, charDef) {
     }
   }
 
+  // moveSpeed/pickupRadius are raw absolute values (~260px/s, ~90px), not a
+  // ~1.0 multiplier like damageMult/luck -- a passive can't grant them as a
+  // direct additive delta and still describe itself as "+N% speed" (Treads'
+  // "+7%/lvl" was actually adding 0.07 raw px/s onto ~260, a ~0.03% effect).
+  // moveSpeedMult/pickupRadiusMult are the fractional accumulators passives
+  // should grant instead; applied here, after the passive loop and before
+  // overflow's own (already-correct) multiplicative speed bonus.
+  s.moveSpeed *= 1 + (s.moveSpeedMult || 0);
+  s.pickupRadius *= 1 + (s.pickupRadiusMult || 0);
+
   // Endgame overflow bonuses (see levelup-options.js OVERFLOW_OPTIONS) --
   // small, uncapped stacking nudges so a maxed-out build always has
   // *something* left to grow instead of hitting a hard progression wall.
@@ -106,7 +116,10 @@ export function gainXp(player, amount, onLevelUp) {
 
 export function takeDamage(player, rawAmount) {
   if (player.invuln > 0) return 0;
-  const reduced = Math.max(1, rawAmount - player.stats.armorFlat);
+  // armorFlat comes off first (a flat reduction per hit), then dmgTakenMult
+  // (Deflector Plate et al.) scales what's left -- so armor and % reduction
+  // stack multiplicatively rather than fighting over the same raw number.
+  const reduced = Math.max(1, (rawAmount - player.stats.armorFlat) * (1 + (player.stats.dmgTakenMult || 0)));
   player.hp -= reduced;
   player.invuln = 0.75;
   player.hitFlash = 0.2;

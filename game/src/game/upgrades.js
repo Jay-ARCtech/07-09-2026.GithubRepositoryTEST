@@ -25,6 +25,13 @@ export function upgradeCost(def, currentLevel) {
 }
 
 export function computeCoresEarned(world) {
-  const base = Math.floor(world.time / 3) + world.kills * 0.4 + world.bossesKilled * 40;
+  // world.coresEarned is the running total from "gold" pickups, shown live
+  // in the HUD all run (hud.js: meta.cores + world.coresEarned) -- it was
+  // being silently discarded here and replaced with a from-scratch formula,
+  // so gold pickups (and anything that scales their value, like Scrap
+  // Collector's goldGainMult) never actually banked anything. Folding it in
+  // makes the number the player watched climb during the run match what
+  // they're told they earned at Game Over.
+  const base = Math.floor(world.time / 3) + world.kills * 0.4 + world.bossesKilled * 40 + (world.coresEarned || 0);
   return Math.round(base);
 }

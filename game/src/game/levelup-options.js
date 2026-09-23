@@ -1,6 +1,14 @@
 import { WEAPON_LIST, WEAPONS } from "./weapons.js";
 import { PASSIVE_LIST, PASSIVES } from "./passives.js";
 
+// Target draw odds among passive candidates specifically (weapons/overflow/
+// revive keep their own pre-existing weights, untouched): 50% common, 20%
+// uncommon, 20% rare, 10% elite. A tier's mass is divided evenly across
+// however many of that tier's cards are actually eligible right now, so the
+// *tier* keeps this exact probability regardless of how many cards happen
+// to be in it or how many the player has already maxed out.
+const RARITY_WEIGHT = { common: 50, uncommon: 20, rare: 20, elite: 10 };
+
 // Endgame fallback: once every weapon/passive is maxed and every eligible
 // evolution taken, the real candidate pool runs dry. Without a fallback,
 // generateOptions returns fewer options than requested -- possibly zero --
@@ -52,17 +60,28 @@ export function generateOptions(player, rng, count = 4, opts = {}) {
     }
   }
 
+  const passiveCandidates = [];
   for (const p of player.passives) {
     if (p.level < PASSIVES[p.id].maxLevel) {
-      candidates.push({ kind: "passive", id: p.id, currentLevel: p.level, isNew: false, weight: 3 });
+      passiveCandidates.push({ kind: "passive", id: p.id, currentLevel: p.level, isNew: false });
     }
   }
   if (player.passives.length < PASSIVE_LIST.length) {
     const owned = new Set(player.passives.map((p) => p.id));
     for (const def of PASSIVE_LIST) {
-      if (!owned.has(def.id)) candidates.push({ kind: "passive", id: def.id, currentLevel: 0, isNew: true, weight: 2 });
+      if (!owned.has(def.id)) passiveCandidates.push({ kind: "passive", id: def.id, currentLevel: 0, isNew: true });
     }
   }
+  const rarityCounts = {};
+  for (const c of passiveCandidates) {
+    const r = PASSIVES[c.id].rarity;
+    rarityCounts[r] = (rarityCounts[r] || 0) + 1;
+  }
+  for (const c of passiveCandidates) {
+    const r = PASSIVES[c.id].rarity;
+    c.weight = RARITY_WEIGHT[r] / rarityCounts[r];
+  }
+  candidates.push(...passiveCandidates);
 
   // Always-available filler so the pool never runs dry once real content
   // (weapons/passives/evolutions) is exhausted -- see OVERFLOW_OPTIONS above.

@@ -1,4 +1,4 @@
-import { spawnBullet } from "./world.js";
+import { spawnBullet, isHostileFaction } from "./world.js";
 import { angleTo, dist2, TAU } from "../engine/utils.js";
 import { audio } from "../engine/audio.js";
 
@@ -28,6 +28,21 @@ function nearbyEnemies(world, x, y, range, excludeSet) {
 
 function rollCrit(stats, rng) {
   return rng.chance(stats.critChance) ? 1 + stats.critDamage : 1;
+}
+
+// Weapon-tag damage cards (Ballistic/Field/Arc Coil etc.) grant a
+// `${tag}DmgMult` stat; each weapon below names its own tag inline rather
+// than threading `def.tag` through the update() ctx.
+function tagMult(stats, tag) {
+  return 1 + (stats[`${tag}DmgMult`] || 0);
+}
+
+// Vampiric Rounds/Nano-Surgeon heal the *player* off damage the player's
+// own weapons deal. Deliberately not applied to ally-fired shots (Drone Bay
+// bullets go through spawnBullet with sourceFaction "player" too, but never
+// call this) -- lifesteal is about your own build, not your squad's.
+function applyLifesteal(player, stats, dmg) {
+  if (stats.lifesteal) player.hp = Math.min(player.maxHp, player.hp + dmg * stats.lifesteal);
 }
 
 // Every weapon def: id, name, icon, color, maxLevel, evolution{requires,name,desc},
@@ -62,12 +77,13 @@ export const WEAPONS = {
           y: player.y,
           vx: Math.cos(ang) * speed,
           vy: Math.sin(ang) * speed,
-          dmg: (evolved ? 9 + ws.level * 2 : 3 + ws.level * 1.2) * stats.damageMult * crit,
+          dmg: (evolved ? 9 + ws.level * 2 : 3 + ws.level * 1.2) * stats.damageMult * tagMult(stats, "ballistic") * crit,
           radius: evolved ? 5 : 4,
-          pierce: evolved ? 99 : ws.level >= 4 ? 1 : 0,
+          pierce: (evolved ? 99 : ws.level >= 4 ? 1 : 0) + (stats.pierceBonus || 0),
           life: 1.4,
           color: evolved ? "#f97316" : "#7dd3fc",
           crit: crit > 1,
+          playerWeapon: true,
         });
       }
       audio.sfxShoot("blaster");
@@ -99,13 +115,19 @@ export const WEAPONS = {
       ws.hitTimers = ws.hitTimers || new Map();
       for (const [id, t] of ws.hitTimers) ws.hitTimers.set(id, t - dt);
       for (const e of world.enemies) {
-        if (!e.active) continue;
+        // Iterating world.enemies unconditionally would let Orbiter Blades
+        // damage the player's own Combat Drone/Medic/Vanguard too (they
+        // live in this same array) -- restrict to units actually hostile to
+        // the player's own faction, same rule bullets already use.
+        if (!e.active || !isHostileFaction(player.faction, e.faction)) continue;
         const dx = e.x - player.x,
           dy = e.y - player.y;
         if (dx * dx + dy * dy > (coverage + e.radius) ** 2) continue;
         const cool = ws.hitTimers.get(e.id) ?? 0;
         if (cool <= 0) {
-          e.hp -= (ws.evolved ? 4 + ws.level : 1.6 + ws.level * 0.7) * stats.damageMult;
+          const dmg = (ws.evolved ? 4 + ws.level : 1.6 + ws.level * 0.7) * stats.damageMult * tagMult(stats, "field");
+          e.hp -= dmg;
+          applyLifesteal(player, stats, dmg);
           e.hitFlash = 0.08;
           e.dot = ws.evolved ? { dps: 3, time: 2 } : e.dot;
           ws.hitTimers.set(e.id, hitCd);
@@ -131,16 +153,20 @@ export const WEAPONS = {
       const baseCd = ws.evolved ? 1.6 - ws.level * 0.12 : 2.6 - ws.level * 0.25;
       ws.cd = Math.max(0.6, baseCd) * (1 + stats.cooldownMult);
       const radius = (ws.evolved ? 220 : 150) * (1 + stats.areaMult);
-      const dmg = (ws.evolved ? 10 + ws.level * 3 : 4 + ws.level * 1.6) * stats.damageMult;
+      const dmg = (ws.evolved ? 10 + ws.level * 3 : 4 + ws.level * 1.6) * stats.damageMult * tagMult(stats, "field");
+      const knockback = 220 * (1 + (stats.knockbackMult || 0));
       for (const e of world.enemies) {
-        if (!e.active) continue;
+        // Same fix as Orbiter above -- this loop has no faction check, so it
+        // would otherwise blast the player's own allies too.
+        if (!e.active || !isHostileFaction(player.faction, e.faction)) continue;
         const d2 = dist2(player.x, player.y, e.x, e.y);
         if (d2 <= radius * radius) {
           e.hp -= dmg;
+          applyLifesteal(player, stats, dmg);
           e.hitFlash = 0.12;
           const d = Math.sqrt(d2) || 1;
-          e.knockX = ((e.x - player.x) / d) * 220;
-          e.knockY = ((e.y - player.y) / d) * 220;
+          e.knockX = ((e.x - player.x) / d) * knockback;
+          e.knockY = ((e.y - player.y) / d) * knockback;
           world._onEnemyDamaged?.(e);
         }
       }
@@ -172,12 +198,13 @@ export const WEAPONS = {
           y: player.y,
           vx: Math.cos(ang) * 340,
           vy: Math.sin(ang) * 340,
-          dmg: (ws.evolved ? 14 + ws.level * 4 : 6 + ws.level * 2) * stats.damageMult * crit,
+          dmg: (ws.evolved ? 14 + ws.level * 4 : 6 + ws.level * 2) * stats.damageMult * tagMult(stats, "ballistic") * crit,
           radius: 5,
           life: 3,
           homing: true,
           kind: "missile",
           aoeRadius: (ws.evolved ? 110 : 70) * (1 + stats.areaMult),
+          playerWeapon: true,
           color: "#fb923c",
           crit: crit > 1,
         });
@@ -202,12 +229,13 @@ export const WEAPONS = {
       const first = nearestEnemy(world, player.x, player.y, 750);
       if (!first) return;
       const chainCount = (ws.evolved ? 3 : 1) + ws.level;
-      const dmg = (ws.evolved ? 5 + ws.level * 2 : 2.5 + ws.level) * stats.damageMult;
+      const dmg = (ws.evolved ? 5 + ws.level * 2 : 2.5 + ws.level) * stats.damageMult * tagMult(stats, "arc");
       const hit = new Set();
       let current = first;
       const path = [{ x: player.x, y: player.y }];
       for (let i = 0; i < chainCount && current; i++) {
         current.hp -= dmg;
+        applyLifesteal(player, stats, dmg);
         current.hitFlash = 0.1;
         world._onEnemyDamaged?.(current);
         hit.add(current);
@@ -256,11 +284,13 @@ export const WEAPONS = {
               y: dy,
               vx: Math.cos(ang2) * 560,
               vy: Math.sin(ang2) * 560,
-              dmg: (2 + ws.level) * stats.damageMult * crit,
+              dmg: (2 + ws.level) * stats.damageMult * tagMult(stats, "ballistic") * crit,
               radius: 3.5,
+              pierce: stats.pierceBonus || 0,
               life: 1.2,
               color: "#a78bfa",
               crit: crit > 1,
+              playerWeapon: true,
             });
           }
         }

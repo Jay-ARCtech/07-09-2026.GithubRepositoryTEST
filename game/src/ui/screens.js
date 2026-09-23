@@ -9,6 +9,7 @@ import { ENEMY_LIST } from "../game/enemies.js";
 import { BOSS_LIST } from "../game/bosses.js";
 import { MIN_EMPIRES, MAX_EMPIRES } from "../game/warmode.js";
 import { formatTime } from "../engine/utils.js";
+import { drawUnitShape, drawBossShape, drawAllyShape } from "../engine/scenery.js";
 
 function resolveOptionDef(opt) {
   if (opt.kind === "weapon") return WEAPONS[opt.id];
@@ -62,14 +63,53 @@ function clearChildren(node) {
   while (node.firstChild) node.removeChild(node.firstChild);
 }
 
-function makeCard({ icon, name, desc, meta, locked, onClick, accent }) {
+// Draws the exact same silhouette used on the battlefield (scenery.js's
+// drawUnitShape/drawBossShape/drawAllyShape) into a small preview canvas,
+// instead of a unicode glyph that has to be hand-kept in sync with
+// whatever the live render actually looks like. `shape.kind` picks which
+// draw function; `hullColor` mirrors main.js's ship-hull special case
+// (Mimic/operator silhouettes are a dark hull over their own glow, not a
+// solid fill in the entity's color).
+function drawCardShapePreview(canvas, shape) {
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width,
+    h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.save();
+  ctx.translate(w / 2, h / 2);
+  const r = Math.min(w, h) * 0.34;
+  const facing = -Math.PI / 2;
+  ctx.globalAlpha = 0.4;
+  ctx.fillStyle = shape.color;
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 1.15, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  const isShipHull = shape.shapeName === "mimic" || shape.shapeName === "operator";
+  const hullColor = isShipHull ? "#0b1220" : shape.color;
+  if (shape.kind === "boss") drawBossShape(ctx, shape.shapeName, r, hullColor, { time: 0, facing });
+  else if (shape.kind === "ally") drawAllyShape(ctx, shape.shapeName, r, shape.color, facing);
+  else drawUnitShape(ctx, shape.shapeName, r, hullColor, { facing });
+  ctx.restore();
+}
+
+function makeCard({ icon, name, desc, meta, locked, onClick, accent, shape }) {
   const card = document.createElement("div");
   card.className = "card" + (locked ? " locked" : "");
   if (accent) card.style.borderColor = accent;
-  const iconEl = document.createElement("div");
-  iconEl.className = "card-icon";
-  iconEl.textContent = icon || "";
-  if (accent) iconEl.style.color = accent;
+  let iconEl;
+  if (shape) {
+    iconEl = document.createElement("canvas");
+    iconEl.className = "card-icon card-shape-icon";
+    iconEl.width = 56;
+    iconEl.height = 56;
+    drawCardShapePreview(iconEl, shape);
+  } else {
+    iconEl = document.createElement("div");
+    iconEl.className = "card-icon";
+    iconEl.textContent = icon || "";
+    if (accent) iconEl.style.color = accent;
+  }
   const nameEl = document.createElement("div");
   nameEl.className = "card-name";
   nameEl.textContent = name;
@@ -430,6 +470,7 @@ export function renderCodex(meta, onAllyUpgrade) {
       accent: ally.color,
       locked: maxed || meta.cores < cost,
       onClick: () => onAllyUpgrade(key),
+      shape: { kind: "ally", shapeName: ally.id, color: ally.color },
     });
     allyGrid.appendChild(card);
   }
@@ -450,6 +491,7 @@ export function renderCodex(meta, onAllyUpgrade) {
               ? "Support"
               : "Ranged",
       accent: enemy.color,
+      shape: { kind: "unit", shapeName: enemy.shape, color: enemy.color },
     });
     enemyGrid.appendChild(card);
   }
@@ -463,6 +505,7 @@ export function renderCodex(meta, onAllyUpgrade) {
       desc: boss.desc,
       meta: "Boss",
       accent: boss.color,
+      shape: { kind: "boss", shapeName: boss.shape, color: boss.color },
     });
     bossGrid.appendChild(card);
   }

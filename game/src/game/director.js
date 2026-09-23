@@ -6,44 +6,66 @@ import { TAU } from "../engine/utils.js";
 const BOSS_IDS = Object.keys(BOSS_TYPES);
 const BOSS_INTERVAL = 4.5 * 60;
 
-function weightTableForTime(t) {
-  if (t < 60) return { grunt: 70, runner: 30 };
-  if (t < 150) return { grunt: 50, runner: 25, tank: 15, shooter: 10, skirmisher: 8, mimic: 5 };
-  if (t < 300)
-    return { grunt: 32, runner: 18, tank: 18, shooter: 12, splitter: 10, gatling: 6, healer: 4, skirmisher: 8, heavyGunner: 6, mimic: 7 };
-  if (t < 480)
+// Every archetype is reachable within the first 2.5 minutes -- the old
+// table gated roughly half the roster (sniper, launcher, heavyGunner,
+// siegeCannon, summoner, engineer) behind an 8-minute wall, so a typical
+// run never saw them. Tougher/rarer archetypes still start at a lower
+// weight than the basics and grow in, but nothing is fully locked out of
+// an early run anymore.
+export function weightTableForTime(t) {
+  if (t < 30) return { grunt: 55, runner: 25, shooter: 12, skirmisher: 8 };
+  if (t < 75)
+    return { grunt: 34, runner: 18, tank: 10, shooter: 14, skirmisher: 10, splitter: 8, gatling: 8, healer: 4, mimic: 4 };
+  if (t < 150)
     return {
       grunt: 22,
-      runner: 15,
-      tank: 15,
-      shooter: 12,
-      splitter: 10,
-      gatling: 9,
-      sniper: 7,
+      runner: 14,
+      tank: 12,
+      shooter: 10,
+      skirmisher: 8,
+      splitter: 8,
+      gatling: 8,
+      sniper: 6,
       launcher: 6,
+      heavyGunner: 6,
       healer: 5,
       summoner: 5,
-      engineer: 4,
-      skirmisher: 8,
-      heavyGunner: 7,
-      siegeCannon: 5,
+      engineer: 5,
+      mimic: 6,
+    };
+  if (t < 300)
+    return {
+      grunt: 16,
+      runner: 12,
+      tank: 12,
+      shooter: 9,
+      skirmisher: 7,
+      splitter: 8,
+      gatling: 9,
+      sniper: 8,
+      launcher: 7,
+      heavyGunner: 8,
+      siegeCannon: 4,
+      healer: 6,
+      summoner: 6,
+      engineer: 6,
       mimic: 8,
     };
   return {
-    grunt: 16,
-    runner: 12,
-    tank: 14,
-    shooter: 10,
-    splitter: 9,
-    gatling: 10,
+    grunt: 14,
+    runner: 10,
+    tank: 12,
+    shooter: 9,
+    skirmisher: 7,
+    splitter: 8,
+    gatling: 9,
     sniper: 9,
     launcher: 8,
-    healer: 6,
-    summoner: 6,
-    engineer: 5,
-    skirmisher: 8,
     heavyGunner: 8,
     siegeCannon: 6,
+    healer: 6,
+    summoner: 6,
+    engineer: 6,
     mimic: 9,
   };
 }

@@ -163,6 +163,7 @@ body { font-family: var(--font-mono); letter-spacing: 0.2px; user-select: none; 
 .card:hover { transform: translateY(-3px); border-color: var(--accent); box-shadow: 0 0 18px rgba(0,240,255,0.18); }
 .card.locked { opacity: 0.55; cursor: not-allowed; }
 .card .card-icon { font-size: 1.6rem; }
+.card .card-shape-icon { width: 44px; height: 44px; font-size: 0; }
 .card .card-name { font-weight: 800; letter-spacing: 0.5px; }
 .card .card-desc { color: var(--text-dim); font-size: 0.85rem; }
 .card .card-meta { font-size: 0.75rem; color: var(--text-dim); margin-top: auto; }

@@ -95,6 +95,59 @@ function drawPylon(ctx, p, t) {
   ctx.restore();
 }
 
+// Billboards are physical obstacles, not just backdrop -- the player has to
+// route around them instead of walking straight through a "solid" neon
+// structure. This is a circle-vs-rotated-rectangle push-out, done in the
+// billboard's own local (unrotated) space: transform the player's offset
+// into that space, clamp to the half-extents to find the nearest point on
+// the rectangle, and if that point is within the player's radius, push the
+// player back out along the separating axis and rotate the correction back
+// to world space. Deliberately player-only (enemies/allies still pass
+// through) -- full steering/pathfinding for hundreds of simultaneous units
+// is a much bigger system than "the player has to go around a billboard".
+export function resolveArenaObstacles(scenery, x, y, r) {
+  for (const b of scenery.billboards) {
+    const dx = x - b.x,
+      dy = y - b.y;
+    const cos = Math.cos(b.rot),
+      sin = Math.sin(b.rot);
+    const lx = dx * cos + dy * sin;
+    const ly = -dx * sin + dy * cos;
+    const hw = b.w / 2,
+      hh = b.h / 2;
+    if (lx < -hw - r || lx > hw + r || ly < -hh - r || ly > hh + r) continue;
+    const cx = clamp(lx, -hw, hw);
+    const cy = clamp(ly, -hh, hh);
+    const ddx = lx - cx,
+      ddy = ly - cy;
+    const dist = Math.hypot(ddx, ddy);
+    let nlx, nly;
+    if (dist < 1e-4) {
+      // Player center is inside the rectangle -- the clamp above is a no-op
+      // for an in-range point, so cx/cy just echo lx/ly instead of giving a
+      // boundary point, and ddx/ddy come out ~0. Push straight out along
+      // whichever axis has the shallower penetration, landing exactly `r`
+      // beyond that edge (not `r` from wherever inside the box we started).
+      const penX = hw - Math.abs(lx);
+      const penY = hh - Math.abs(ly);
+      if (penX < penY) {
+        nlx = (lx >= 0 ? 1 : -1) * (hw + r);
+        nly = ly;
+      } else {
+        nlx = lx;
+        nly = (ly >= 0 ? 1 : -1) * (hh + r);
+      }
+    } else {
+      if (dist >= r) continue;
+      nlx = cx + (ddx / dist) * r;
+      nly = cy + (ddy / dist) * r;
+    }
+    x = b.x + nlx * cos - nly * sin;
+    y = b.y + nlx * sin + nly * cos;
+  }
+  return { x, y };
+}
+
 export function drawArenaGround(ctx, world, scenery, t) {
   for (const b of scenery.billboards) drawHologramBillboard(ctx, b, t);
   for (const p of scenery.pylons) drawPylon(ctx, p, t);

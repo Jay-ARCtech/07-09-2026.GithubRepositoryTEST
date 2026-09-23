@@ -24,7 +24,16 @@ import { updateBoss, BOSS_TYPES } from "./game/bosses.js";
 import { updateDirector } from "./game/director.js";
 import { updateAlly, updateAllySystem } from "./game/allies.js";
 import { updateWarDirector, startWarMode } from "./game/warmode.js";
-import { buildArenaScenery, drawArenaGround, drawUnitShape, drawBossShape, drawAllyShape, drawBulletTracer, drawCitySkyline } from "./engine/scenery.js";
+import {
+  buildArenaScenery,
+  drawArenaGround,
+  drawUnitShape,
+  drawBossShape,
+  drawAllyShape,
+  drawBulletTracer,
+  drawCitySkyline,
+  resolveArenaObstacles,
+} from "./engine/scenery.js";
 import { spawnXpGem, spawnGold, spawnHealth, spawnChest, spawnOverdrive, updatePickup } from "./game/pickups.js";
 import { unlockAchievement } from "./game/achievements.js";
 import { META_UPGRADES, ALLY_META_UPGRADES, upgradeCost, computeCoresEarned } from "./game/upgrades.js";
@@ -564,6 +573,11 @@ function updatePlayerMovement(dt) {
   const clamped = clampToArena(world, player.x, player.y, player.radius);
   player.x = clamped.x;
   player.y = clamped.y;
+  if (scenery) {
+    const pushed = resolveArenaObstacles(scenery, player.x, player.y, player.radius);
+    player.x = pushed.x;
+    player.y = pushed.y;
+  }
 
   player.invuln = Math.max(0, player.invuln - dt);
   player.hitFlash = Math.max(0, player.hitFlash - dt);
@@ -1169,6 +1183,7 @@ startLoop((dt, now) => {
         const m = world?.enemies?.find((e) => e.active && e.type === "mimic");
         return m ? { isBoss: !!m.isBoss, hp: m.hp, maxHp: m.maxHp, weapons: m.mimicWeapons?.map((w) => w.id) } : null;
       })(),
+      billboards: scenery?.billboards?.map((b) => ({ x: b.x, y: b.y, w: b.w, h: b.h, rot: b.rot })),
     };
   }
 });

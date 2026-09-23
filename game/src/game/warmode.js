@@ -66,9 +66,30 @@ function weightedPick(rng, table) {
   return entries[0][0];
 }
 
-function empireWeightTable(t) {
-  if (t < 120) return { grunt: 45, runner: 20, shooter: 18, gatling: 10, tank: 7, skirmisher: 10, mimic: 5 };
-  return { grunt: 28, runner: 16, shooter: 16, gatling: 14, tank: 10, sniper: 8, launcher: 8, skirmisher: 10, heavyGunner: 8, mimic: 7 };
+// Mirrors director.js's early-variety fix: the old table never spawned
+// splitters, healers, summoners, engineers, or siege cannons as empire
+// troops at all, so half the roster never showed up in War Mode.
+export function empireWeightTable(t) {
+  if (t < 60) return { grunt: 40, runner: 20, shooter: 14, skirmisher: 10, tank: 6, mimic: 4 };
+  if (t < 150)
+    return { grunt: 26, runner: 16, shooter: 14, skirmisher: 10, tank: 8, gatling: 10, splitter: 6, healer: 5, mimic: 6 };
+  return {
+    grunt: 20,
+    runner: 14,
+    shooter: 12,
+    skirmisher: 9,
+    tank: 9,
+    gatling: 10,
+    splitter: 7,
+    sniper: 7,
+    launcher: 7,
+    heavyGunner: 8,
+    siegeCannon: 5,
+    healer: 6,
+    summoner: 6,
+    engineer: 5,
+    mimic: 7,
+  };
 }
 
 export function updateWarDirector(world, dt, player) {

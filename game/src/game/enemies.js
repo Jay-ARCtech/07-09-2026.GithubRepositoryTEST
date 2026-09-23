@@ -1,6 +1,8 @@
 import { allocId, spawnBullet, clampToArena, findNearestHostile, spawnHazard } from "./world.js";
 import { angleTo, dist, TAU } from "../engine/utils.js";
 import { updateMimicCombat, mimicPreferredRange } from "./mimic.js";
+import { spawnAlly } from "./allies.js";
+import { getDifficultyMods } from "./difficulty.js";
 
 // Every non-boss hostile archetype. `behavior` selects the AI routine in
 // updateEnemy below. Support types (heal/summon/hazard) deliberately have
@@ -217,8 +219,9 @@ export const ENEMY_LIST = Object.entries(ENEMY_TYPES).map(([id, def]) => ({ id, 
 export function spawnEnemy(world, typeId, x, y, faction = "horde") {
   const def = ENEMY_TYPES[typeId];
   const t = world.time;
-  const scale = 1 + t / 90; // gentle exponential-feeling ramp via linear+level curve
-  const eliteRoll = world.rng.chance(Math.min(0.22, 0.03 + t / 900));
+  const mods = getDifficultyMods(world);
+  const scale = (1 + t / 90) * mods.hpMult; // gentle exponential-feeling ramp via linear+level curve
+  const eliteRoll = world.rng.chance(Math.min(0.9, (0.03 + t / 900) * mods.eliteChanceMult));
   const elite = eliteRoll;
   const mult = elite ? 1 + t / 260 : 1;
   const pos = clampToArena(world, x, y);
@@ -235,7 +238,7 @@ export function spawnEnemy(world, typeId, x, y, faction = "horde") {
     hp: def.hp * scale * mult * (elite ? 2.6 : 1),
     maxHp: def.hp * scale * mult * (elite ? 2.6 : 1),
     speed: def.speed * (elite ? 1.08 : 1),
-    dmg: def.dmg * (1 + t / 400) * (elite ? 1.6 : 1),
+    dmg: def.dmg * (1 + t / 400) * mods.dmgMult * (elite ? 1.6 : 1),
     xpValue: Math.round(def.xp * (elite ? 5 : 1) * (1 + t / 200)),
     elite,
     color: def.color,
@@ -272,7 +275,8 @@ const REF_RANGED_RADIUS = 13;
 export function spawnMimicEnemy(world, x, y, player, faction = "horde") {
   const def = ENEMY_TYPES.mimic;
   const t = world.time;
-  const scale = 1 + t / 90;
+  const mods = getDifficultyMods(world);
+  const scale = (1 + t / 90) * mods.hpMult;
   const weapons = (player.weapons && player.weapons.length ? player.weapons : [{ id: "blaster", level: 1, evolved: false }]).map((w) => ({
     id: w.id,
     level: w.level,
@@ -293,7 +297,7 @@ export function spawnMimicEnemy(world, x, y, player, faction = "horde") {
     hp: def.hp * scale * passiveBoost,
     maxHp: def.hp * scale * passiveBoost,
     speed: def.speed * (1 + Math.min(0.3, (player.passives?.length || 0) * 0.02)),
-    dmg: def.dmg * (1 + t / 400) * passiveBoost,
+    dmg: def.dmg * (1 + t / 400) * mods.dmgMult * passiveBoost,
     xpValue: Math.round(def.xp * (1 + t / 200)),
     elite: false,
     color: player.color || def.color,
@@ -312,7 +316,30 @@ export function spawnMimicEnemy(world, x, y, player, faction = "horde") {
     slowUntil: 0,
   };
   world.enemies.push(mimic);
+  spawnMimicAllyEscorts(world, mimic, player, faction);
   return mimic;
+}
+
+// A Mimic is supposed to be "a copy of you" -- that has to include whatever
+// allies you've summoned, not just your weapons. Spawns one hostile escort
+// per ally kind the player currently has active (read off the same stat
+// fields allies.js's updateAllySystem uses to decide how many of each the
+// player is entitled to), sharing the mimic's faction so it's hostile to
+// the real player/allies via the normal faction rules. Exported so
+// bosses.js can give the boss-scale "Mimic Overlord" the same escorts.
+export function spawnMimicAllyEscorts(world, mimic, player, faction) {
+  const stats = player.stats || {};
+  const kinds = [
+    ["drone", stats.droneMax > 0],
+    ["medic", stats.medicMax > 0],
+    ["vanguard", stats.vanguardMax > 0],
+  ];
+  for (const [kind, active] of kinds) {
+    if (!active) continue;
+    const ang = world.rng.range(0, TAU);
+    const r = 50 + world.rng.range(0, 30);
+    spawnAlly(world, kind, mimic.x + Math.cos(ang) * r, mimic.y + Math.sin(ang) * r, 1, faction);
+  }
 }
 
 function fireHostileBolt(world, e, target, opts) {

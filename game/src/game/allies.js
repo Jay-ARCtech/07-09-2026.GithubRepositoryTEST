@@ -45,15 +45,21 @@ export const ALLY_TYPES = {
 };
 export const ALLY_LIST = Object.entries(ALLY_TYPES).map(([id, def]) => ({ id, ...def }));
 
-export function spawnAlly(world, kind, x, y, powerMult = 1) {
+// faction defaults to "player" for the real player's own summoned allies
+// (isAlly:true, tracked by permadeath/HUD/the ally kill toast). Any other
+// faction spawns a hostile look-alike instead -- isAlly stays false so it
+// never touches those player-only systems, but allyKind is still set so
+// the renderer draws it with the same silhouette (see main.js). Used by
+// enemies.js to give a Mimic its own drone/medic/vanguard escorts.
+export function spawnAlly(world, kind, x, y, powerMult = 1, faction = "player") {
   const def = ALLY_TYPES[kind];
   const pos = clampToArena(world, x, y);
   const ally = {
     id: allocId(),
     active: true,
     type: "ally_" + kind,
-    faction: "player",
-    isAlly: true,
+    faction,
+    isAlly: faction === "player",
     allyKind: kind,
     x: pos.x,
     y: pos.y,
@@ -64,6 +70,11 @@ export function spawnAlly(world, kind, x, y, powerMult = 1) {
     maxHp: def.hp * powerMult,
     speed: def.speed,
     dmg: def.dmg * powerMult,
+    // Real player allies never reach the generic kill-reward path (main.js's
+    // killEnemy special-cases isAlly before getting there), but a hostile
+    // mimic escort does -- without an explicit xpValue here it would drop an
+    // XP gem worth `undefined`, corrupting the player's XP with NaN on pickup.
+    xpValue: Math.round(def.hp * powerMult * 0.35),
     color: def.color,
     behavior: def.behavior,
     hitFlash: 0,
@@ -108,12 +119,15 @@ export function updateAlly(e, world, dt, player) {
     if (e.supportTimer <= 0) {
       e.supportTimer = 3;
       let healed = false;
-      if (player.hp < player.maxHp) {
+      // Only the real player's own faction ever heals the real player --
+      // a hostile mimic-medic escort (faction !== "player") heals its
+      // mimic and squadmates below instead, never the real player.
+      if (e.faction === "player" && player.hp < player.maxHp) {
         player.hp = Math.min(player.maxHp, player.hp + e.healPower);
         healed = true;
       }
       for (const o of world.enemies) {
-        if (!o.active || o.faction !== "player" || o === e) continue;
+        if (!o.active || o.faction !== e.faction || o === e) continue;
         if (dist(e.x, e.y, o.x, o.y) > 220) continue;
         if (o.hp < o.maxHp) {
           o.hp = Math.min(o.maxHp, o.hp + e.healPower);

@@ -40,6 +40,7 @@ import { META_UPGRADES, ALLY_META_UPGRADES, upgradeCost, computeCoresEarned } fr
 import { generateOptions } from "./game/levelup-options.js";
 import { ASCENSION_TIERS, canAscend, ascend } from "./game/ascension.js";
 import { PASSIVE_LIST } from "./game/passives.js";
+import { getDifficulty, DIFFICULTY_LIST } from "./game/difficulty.js";
 
 import { setHudVisible, updateHud, showToast } from "./ui/hud.js";
 import {
@@ -56,6 +57,7 @@ import {
   renderAscension,
   renderWarSetup,
   renderCodex,
+  renderDifficultySelect,
   setMenuBestLabel,
 } from "./ui/screens.js";
 
@@ -104,6 +106,7 @@ function onAchievementToast(def) {
 
 // ---------------------------------------------------------------- flow
 let pendingWarEmpireCount = null;
+let pendingDifficultyId = "hard";
 
 function goMenu() {
   gameState = "menu";
@@ -111,6 +114,15 @@ function goMenu() {
   setHudVisible(false);
   setMenuBestLabel(meta);
   showScreen("screen-menu");
+}
+
+function openDifficultySelect() {
+  gameState = "difficulty";
+  renderDifficultySelect(DIFFICULTY_LIST, (id) => {
+    pendingDifficultyId = id;
+    openCharSelect();
+  });
+  showScreen("screen-difficulty");
 }
 
 function openCharSelect() {
@@ -121,7 +133,7 @@ function openCharSelect() {
       pendingWarEmpireCount = null;
       startRun(id, { war: true, empireCount });
     } else {
-      startRun(id, { daily: false });
+      startRun(id, { daily: false, difficultyId: pendingDifficultyId });
     }
   });
   showScreen("screen-charselect");
@@ -239,12 +251,17 @@ function openWarSetup() {
   showScreen("screen-warsetup");
 }
 
-function startRun(charId, { daily = false, war = false, empireCount = 4 } = {}) {
+function startRun(charId, { daily = false, war = false, empireCount = 4, difficultyId = "hard" } = {}) {
   charDef = CHARACTERS[charId];
   dailyMode = daily;
   const seed = daily ? dailySeedToday() : null;
   world = createWorld(seed, war ? "war" : "survival");
-  scenery = buildArenaScenery(world);
+  // War Mode and the Daily Challenge don't go through the difficulty-select
+  // screen -- they keep today's "Hard" behavior via getDifficultyMods()'s
+  // fallback. Only a plain Survival run carries a real difficultyId.
+  world.difficultyId = war || daily ? null : difficultyId;
+  world.difficultyDef = getDifficulty(world.difficultyId || "hard");
+  scenery = buildArenaScenery(world, world.difficultyDef.obstacleMult);
   world._onEnemyDamaged = (e) => {
     particles.spawnBurst(e.x, e.y, "#ffffff", 3, { speed: 80, life: 0.2 });
   };
@@ -445,6 +462,10 @@ function killEnemy(e) {
   if (e.isBoss) {
     world.bossesKilled += 1;
     world.bossActive = null;
+    // Normal difficulty's graduating roster: each boss kill permanently
+    // strikes the next tier of "basics" out of the spawn table (see
+    // difficulty.js). No-op for every other difficulty.
+    world.difficultyDef?.onBossKilled?.(world);
     showToast(`${e.name} defeated!`, "#4ade80");
     spawnChest(world, e.x, e.y);
     unlockAchievement(meta, "boss_slayer", onAchievementToast);
@@ -605,7 +626,10 @@ function updateEnemiesAndContact(dt) {
   for (const e of world.enemies) {
     if (!e.active) continue;
     if (e.isBoss) updateBoss(e, world, dt, player);
-    else if (e.isAlly) updateAlly(e, world, dt, player);
+    // allyKind covers both the real player's own allies and a hostile
+    // Mimic's ally escorts -- both run the same allyRanged/allyMedic/
+    // allySeek AI in allies.js, just with different factions/targets.
+    else if (e.isAlly || e.allyKind) updateAlly(e, world, dt, player);
     else updateEnemy(e, world, dt, player);
   }
 
@@ -942,13 +966,16 @@ function renderWorld() {
     }
     drawEntityGlow(ctx, 0, 0, e.radius * 1.15, color, e.isBoss || e.elite ? 0.55 : 0.35);
     ctx.shadowBlur = 0;
-    const shape = e.isAlly ? null : (e.isBoss ? BOSS_TYPES[e.type]?.shape : ENEMY_TYPES[e.type]?.shape) ?? (e.isBoss ? "fortress" : "swarm");
+    // allyKind is set on both the real player's own allies (isAlly:true)
+    // and a hostile Mimic's ally escorts (isAlly:false, faction matches the
+    // mimic) -- either way it draws with the ally silhouette family.
+    const shape = e.allyKind ? null : (e.isBoss ? BOSS_TYPES[e.type]?.shape : ENEMY_TYPES[e.type]?.shape) ?? (e.isBoss ? "fortress" : "swarm");
     // Ship-hull shapes (player/Mimic) are a dark silhouette over their own
     // bright glow disc, not a solid fill in e.color like every other
     // archetype -- matches how the real player renders.
     const shapeColor = shape === "mimic" || shape === "operator" ? (flashT > 0 ? "#ffffff" : "#0b1220") : color;
-    if (e.isAlly) {
-      ctx.strokeStyle = "rgba(0,240,255,0.85)";
+    if (e.allyKind) {
+      ctx.strokeStyle = e.isAlly ? "rgba(0,240,255,0.85)" : "rgba(255,56,96,0.85)";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(0, 0, e.radius + 5, 0, TAU);
@@ -1191,7 +1218,7 @@ startLoop((dt, now) => {
 // ---------------------------------------------------------------- screen wiring
 initScreens({
   onAnyClick: () => audio.sfxUiClick(),
-  play: openCharSelect,
+  play: openDifficultySelect,
   daily: openDaily,
   armory: openArmory,
   achievements: openAchievements,
@@ -1210,7 +1237,7 @@ initScreens({
   },
   resume: resumeGame,
   "quit-to-menu": quitToMenu,
-  retry: () => startRun(charDef.id, { daily: dailyMode }),
+  retry: () => startRun(charDef.id, { daily: dailyMode, difficultyId: world?.difficultyId || pendingDifficultyId }),
   quit: () => window.electronAPI?.quit(),
   overload: (btn) => {
     if (btn.dataset.confirming === "1") {

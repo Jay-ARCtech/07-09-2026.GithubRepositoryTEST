@@ -187,6 +187,24 @@ textarea#save-string { width: 100%; height: 70px; background: #05030c; color: va
 .codex-body .card-grid { width: 100%; max-height: none; overflow: visible; }
 .codex-subhint { font-size: 0.75rem; font-weight: 400; color: var(--text-dim); letter-spacing: 0; text-transform: none; }
 
+/* Difficulty select: a 3D-perspective card grid where each card tilts
+   toward the cursor with damped inertia (see screens.js's attachDifficultyTilt) --
+   perspective lives on the viewport wrapper, preserve-3d on each card so the
+   rotateX/rotateY/translateZ it's given actually reads as depth. */
+.difficulty-viewport { perspective: 1350px; width: min(1100px, 94vw); }
+.difficulty-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; max-height: 64vh; overflow-y: auto; padding: 10px; }
+.difficulty-card {
+  position: relative; cursor: pointer; border-radius: 14px; border: 1px solid rgba(255,255,255,0.14);
+  background: linear-gradient(160deg, rgba(20,10,38,0.92), rgba(6,3,14,0.96));
+  padding: 18px 16px; display: flex; flex-direction: column; gap: 8px; text-align: left;
+  transform-style: preserve-3d; will-change: transform; transition: box-shadow 0.2s ease;
+  pointer-events: auto;
+}
+.difficulty-card:hover { box-shadow: 0 0 26px rgba(0,240,255,0.2); }
+.difficulty-icon { font-size: 1.8rem; line-height: 1; }
+.difficulty-name { font-weight: 800; letter-spacing: 0.5px; font-size: 1.05rem; }
+.difficulty-tagline { color: var(--text-dim); font-size: 0.78rem; line-height: 1.35; }
+
 .warsetup-body { display: flex; flex-direction: column; align-items: center; gap: 16px; width: min(560px, 92vw); }
 .warsetup-slider-row { width: 100%; padding: 4px 8px; }
 .warsetup-slider-row input[type="range"] { width: 100%; }

@@ -36,6 +36,7 @@ const SCREEN_IDS = [
   "screen-ascension",
   "screen-warsetup",
   "screen-codex",
+  "screen-difficulty",
 ];
 
 export function hideAllScreens() {
@@ -509,6 +510,77 @@ export function renderCodex(meta, onAllyUpgrade) {
     });
     bossGrid.appendChild(card);
   }
+}
+
+// ---------------- Difficulty select (12-card 3D-tilt carousel) ----------------
+// A lightweight per-card mouse-parallax tilt: each card tracks the cursor
+// offset from its own center, smoothly damps toward it (inertia, not a
+// snap), and self-stops once the screen is hidden rather than needing
+// main.js to remember to cancel it on every possible way of navigating away.
+let difficultyTiltFrame = null;
+
+function attachDifficultyTilt(cards) {
+  if (difficultyTiltFrame) cancelAnimationFrame(difficultyTiltFrame);
+  const state = cards.map(() => ({ tx: 0, ty: 0, rx: 0, ry: 0, hover: false }));
+  cards.forEach((card, i) => {
+    card.addEventListener("mousemove", (e) => {
+      const rect = card.getBoundingClientRect();
+      state[i].tx = (e.clientX - rect.left) / rect.width - 0.5;
+      state[i].ty = (e.clientY - rect.top) / rect.height - 0.5;
+      state[i].hover = true;
+    });
+    card.addEventListener("mouseleave", () => {
+      state[i].hover = false;
+      state[i].tx = 0;
+      state[i].ty = 0;
+    });
+  });
+
+  const screenEl = el("screen-difficulty");
+  function tick() {
+    if (screenEl.classList.contains("hidden")) return; // navigated away -- stop rather than spin forever
+    for (let i = 0; i < cards.length; i++) {
+      const s = state[i];
+      s.rx += (-s.ty * 12 - s.rx) * 0.12;
+      s.ry += (s.tx * 14 - s.ry) * 0.12;
+      const z = s.hover ? 14 : 0;
+      cards[i].style.transform = `rotateX(${s.rx.toFixed(2)}deg) rotateY(${s.ry.toFixed(2)}deg) translateZ(${z}px)`;
+    }
+    difficultyTiltFrame = requestAnimationFrame(tick);
+  }
+  difficultyTiltFrame = requestAnimationFrame(tick);
+}
+
+export function renderDifficultySelect(difficultyList, onPick) {
+  const grid = el("difficulty-grid");
+  clearChildren(grid);
+  const cardEls = [];
+  for (const diff of difficultyList) {
+    const card = document.createElement("div");
+    card.className = "difficulty-card";
+    card.style.borderColor = diff.color;
+    card.style.boxShadow = `0 0 22px ${diff.color}33, inset 0 1px 0 rgba(255,255,255,0.06)`;
+
+    const icon = document.createElement("div");
+    icon.className = "difficulty-icon";
+    icon.textContent = diff.icon;
+    icon.style.color = diff.color;
+
+    const name = document.createElement("div");
+    name.className = "difficulty-name";
+    name.style.color = diff.color;
+    name.textContent = diff.name;
+
+    const tagline = document.createElement("div");
+    tagline.className = "difficulty-tagline";
+    tagline.textContent = diff.tagline;
+
+    card.append(icon, name, tagline);
+    card.addEventListener("click", () => onPick(diff.id));
+    grid.appendChild(card);
+    cardEls.push(card);
+  }
+  attachDifficultyTilt(cardEls);
 }
 
 export function setMenuBestLabel(meta) {

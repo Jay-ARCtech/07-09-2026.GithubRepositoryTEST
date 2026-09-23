@@ -3,6 +3,7 @@ import { angleTo, TAU } from "../engine/utils.js";
 import { bus } from "../engine/bus.js";
 import { audio } from "../engine/audio.js";
 import { updateMimicCombat, mimicPreferredRange } from "./mimic.js";
+import { spawnMimicAllyEscorts } from "./enemies.js";
 
 // Three boss templates with distinct, telegraphed attack patterns so
 // fights read as fair -- every big hit gives the player a visible
@@ -103,6 +104,7 @@ export function spawnBoss(world, typeId, opts = {}) {
     boss.color = srcPlayer?.color || def.color;
   }
   world.enemies.push(boss);
+  if (def.pattern === "mimic" && opts.player) spawnMimicAllyEscorts(world, boss, opts.player, faction);
   if (!opts.silent) world.bossActive = boss;
   audio.sfxBossRoar();
   bus.emit("bossSpawned", boss);

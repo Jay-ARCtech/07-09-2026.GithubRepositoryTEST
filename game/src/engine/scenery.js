@@ -11,10 +11,13 @@
 // enemy spawns/loot for a given seed, breaking Daily Challenge reproducibility.
 import { RNG, TAU, clamp } from "./utils.js";
 
-export function buildArenaScenery(world) {
+export function buildArenaScenery(world, obstacleMult = 1) {
   const rng = new RNG((world.seed ^ 0x5ea9014) >>> 0);
   const billboards = [];
-  const billboardCount = 7;
+  // Gauntlet difficulty raises obstacleMult to pack the rooftop with far
+  // more billboards/pylons to route around; every other difficulty passes
+  // the default 1 and gets today's layout unchanged.
+  const billboardCount = Math.round(7 * obstacleMult);
   for (let i = 0; i < billboardCount; i++) {
     const ang = (TAU / billboardCount) * i + rng.range(-0.25, 0.25);
     const r = rng.range(world.arenaRadius * 0.45, world.arenaRadius * 0.8);

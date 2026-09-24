@@ -17,12 +17,19 @@ function createWindow() {
     },
   });
 
-  win.loadFile(path.join(__dirname, "..", "index.html"));
+  const indexPath = path.join(__dirname, "..", "index.html");
+  win.loadFile(indexPath);
 
-  // The game never needs to leave its own packaged files -- block any
-  // attempt to navigate away or spawn a new window/tab.
+  // The game never needs to leave its own packaged index.html -- block any
+  // attempt to navigate away or spawn a new window/tab. Checking only for
+  // the file:// scheme (rather than the exact packaged path) would still
+  // let a navigation reach an arbitrary local file -- e.g. file:///etc/passwd
+  // -- if some future bug ever let renderer-controlled data reach
+  // location/href. Comparing the resolved path closes that off without
+  // relying on that other bug never existing.
+  const allowedUrl = require("node:url").pathToFileURL(indexPath).href;
   win.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith("file://")) event.preventDefault();
+    if (url !== allowedUrl) event.preventDefault();
   });
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 

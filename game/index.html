@@ -50,6 +50,7 @@
       <p class="subtitle">Survive the swarm. Evolve your arsenal. Break the cycle.</p>
       <div class="menu-buttons">
         <button class="btn btn-primary" data-action="play">Play</button>
+        <button class="btn" data-action="tutorial">How to Play</button>
         <button class="btn" data-action="warmode">All-Out War</button>
         <button class="btn" data-action="daily">Daily Challenge</button>
         <button class="btn" data-action="armory">Armory</button>
@@ -59,7 +60,7 @@
         <button class="btn" data-action="settings">Settings</button>
         <button class="btn hidden" id="btn-quit" data-action="quit">Quit</button>
       </div>
-      <div class="menu-footer">v1.7.0 &middot; <span id="best-run-label"></span></div>
+      <div class="menu-footer">v1.8.0 &middot; <span id="best-run-label"></span></div>
     </div>
   </div>
 
@@ -68,6 +69,40 @@
     <p class="subtitle">Twelve ways to run the horde. Pick one -- you can change it next time.</p>
     <div class="difficulty-viewport">
       <div id="difficulty-grid" class="difficulty-grid"></div>
+    </div>
+    <div class="screen-actions">
+      <button class="btn" data-action="back-to-menu">Back</button>
+    </div>
+  </div>
+
+  <div id="screen-tutorial" class="screen hidden">
+    <h2>How to Play</h2>
+    <div class="codex-body tutorial-body">
+      <h3>Controls</h3>
+      <div id="tutorial-controls" class="tutorial-controls"></div>
+
+      <h3>Core Loop</h3>
+      <div id="tutorial-loop" class="tutorial-loop"></div>
+
+      <h3>Weapons <span class="codex-subhint">(auto-fire -- level them up, evolve the paired ones)</span></h3>
+      <div id="tutorial-weapons" class="card-grid"></div>
+
+      <h3>Passive Rarity Tiers <span class="codex-subhint">(what you're drawing from at every level-up)</span></h3>
+      <div id="tutorial-rarity" class="tutorial-rarity"></div>
+
+      <h3>Enemies <span class="codex-subhint">(full bestiary, including bosses, lives in the Codex)</span></h3>
+      <div id="tutorial-enemies" class="card-grid"></div>
+
+      <h3>Allies</h3>
+      <div id="tutorial-allies" class="card-grid"></div>
+
+      <h3>Difficulty</h3>
+      <p class="tutorial-p">
+        Survival mode offers 12 selectable difficulties, from Easy (fewer enemies, softer hits, a shorter level-up
+        climb, and tougher troops held back far longer) up through Hard, Nightmare, and further flavor difficulties
+        like Clone, Swarm, and Elite Uprising. Pick one from the Difficulty Select screen right after hitting Play.
+        War Mode and the Daily Challenge always run at Hard-equivalent tuning.
+      </p>
     </div>
     <div class="screen-actions">
       <button class="btn" data-action="back-to-menu">Back</button>

@@ -187,6 +187,17 @@ textarea#save-string { width: 100%; height: 70px; background: #05030c; color: va
 .codex-body .card-grid { width: 100%; max-height: none; overflow: visible; }
 .codex-subhint { font-size: 0.75rem; font-weight: 400; color: var(--text-dim); letter-spacing: 0; text-transform: none; }
 
+.tutorial-body { width: min(760px, 94vw); }
+.tutorial-controls { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.tutorial-row { display: flex; justify-content: space-between; gap: 12px; background: var(--panel); border: 1px solid rgba(0,240,255,0.12); border-radius: 8px; padding: 8px 14px; }
+.tutorial-row-label { font-weight: 700; }
+.tutorial-row-keys { color: var(--text-dim); font-size: 0.85rem; text-align: right; }
+.tutorial-loop { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.tutorial-p { color: var(--text-dim); font-size: 0.85rem; line-height: 1.5; margin: 0; }
+.tutorial-rarity { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.tutorial-rarity-row { border: 1px solid; border-radius: 8px; padding: 10px 14px; background: var(--panel); }
+.tutorial-rarity-head { font-weight: 800; letter-spacing: 0.5px; margin-bottom: 4px; }
+
 /* Difficulty select: a 3D-perspective card grid where each card tilts
    toward the cursor with damped inertia (see screens.js's attachDifficultyTilt) --
    perspective lives on the viewport wrapper, preserve-3d on each card so the

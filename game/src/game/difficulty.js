@@ -88,27 +88,29 @@ function hardWeightTable(t) {
 
 // Tougher archetypes exist in the table far earlier than Hard's, but at
 // low weight and gated behind long windows -- when they do show up, it's
-// in trickles, never in force.
+// in trickles, never in force. Windows are roughly 1.6-2x Hard's own tier
+// boundaries (90->150, 240->420, 420->720, 720->1080) so a new player gets
+// noticeably more breathing room at every stage of the run, not just early.
 function easyWeightTable(t) {
   return tieredTable(t, [
-    [90, { grunt: 60, runner: 26, shooter: 10, skirmisher: 4 }],
-    [240, { grunt: 46, runner: 22, shooter: 12, skirmisher: 6, tank: 6, splitter: 5, gatling: 3 }],
-    [
-      420,
-      { grunt: 38, runner: 20, shooter: 12, skirmisher: 6, tank: 7, splitter: 6, gatling: 4, healer: 3, mimic: 3, sniper: 1, launcher: 1 },
-    ],
+    [150, { grunt: 62, runner: 26, shooter: 8, skirmisher: 3 }],
+    [420, { grunt: 48, runner: 22, shooter: 11, skirmisher: 5, tank: 5, splitter: 4, gatling: 2 }],
     [
       720,
+      { grunt: 40, runner: 20, shooter: 12, skirmisher: 6, tank: 6, splitter: 5, gatling: 3, healer: 3, mimic: 2, sniper: 1, launcher: 1 },
+    ],
+    [
+      1080,
       {
-        grunt: 32,
+        grunt: 34,
         runner: 18,
         shooter: 11,
         skirmisher: 6,
-        tank: 8,
+        tank: 7,
         splitter: 6,
-        gatling: 5,
+        gatling: 4,
         healer: 4,
-        mimic: 4,
+        mimic: 3,
         sniper: 2,
         launcher: 2,
         heavyGunner: 1,
@@ -119,15 +121,15 @@ function easyWeightTable(t) {
     [
       Infinity,
       {
-        grunt: 28,
+        grunt: 30,
         runner: 16,
         shooter: 10,
         skirmisher: 6,
-        tank: 8,
+        tank: 7,
         splitter: 6,
-        gatling: 6,
+        gatling: 5,
         healer: 4,
-        mimic: 5,
+        mimic: 4,
         sniper: 3,
         launcher: 3,
         heavyGunner: 2,
@@ -300,15 +302,16 @@ export const DIFFICULTIES = {
   easy: {
     id: "easy",
     name: "Easy",
-    tagline: "Tougher troops trickle in late, and never in force.",
+    tagline: "Fewer enemies, softer hits, a shorter level-up climb, and tougher troops held back for far longer.",
     color: "#4ade80",
     icon: "●",
     weightTableForTime: easyWeightTable,
-    spawnBudgetMult: 0.7,
-    spawnIntervalMult: 1.25,
-    hpMult: 0.85,
-    dmgMult: 0.85,
-    eliteChanceMult: 0.6,
+    spawnBudgetMult: 0.45,
+    spawnIntervalMult: 1.6,
+    hpMult: 0.7,
+    dmgMult: 0.65,
+    eliteChanceMult: 0.3,
+    xpNeededMult: 0.65,
     obstacleMult: 1,
   },
   normal: {

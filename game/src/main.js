@@ -58,6 +58,7 @@ import {
   renderWarSetup,
   renderCodex,
   renderDifficultySelect,
+  renderTutorial,
   setMenuBestLabel,
 } from "./ui/screens.js";
 
@@ -67,7 +68,7 @@ let world = null;
 let player = null;
 let charDef = null;
 let scenery = null;
-let gameState = "menu"; // menu | charselect | playing | paused | levelup | chest | gameover | settings | armory | achievements
+let gameState = "menu"; // menu | tutorial | charselect | playing | paused | levelup | chest | gameover | settings | armory | achievements
 let settingsReturnState = "menu";
 let dailyMode = false;
 let pendingChest = null;
@@ -114,6 +115,12 @@ function goMenu() {
   setHudVisible(false);
   setMenuBestLabel(meta);
   showScreen("screen-menu");
+}
+
+function openTutorial() {
+  gameState = "tutorial";
+  renderTutorial();
+  showScreen("screen-tutorial");
 }
 
 function openDifficultySelect() {
@@ -268,7 +275,7 @@ function startRun(charId, { daily = false, war = false, empireCount = 4, difficu
   world._spawnRing = (x, y, r) => particles.spawnRing(x, y, "#f87171", { size: r, life: 0.5 });
   world._onSupportPulse = (e, color) => particles.spawnRing(e.x, e.y, color, { size: 70, life: 0.4 });
   world._onMimicPulseHit = (dmg) => handlePlayerHit(dmg);
-  player = createPlayer(charDef, meta);
+  player = createPlayer(charDef, meta, world.difficultyDef.xpNeededMult ?? 1);
   if (meta.ascensionLevel >= 3) {
     const pick = PASSIVE_LIST[Math.floor(Math.random() * PASSIVE_LIST.length)];
     addOrLevelPassive(player, pick.id);
@@ -1255,6 +1262,7 @@ startLoop((dt, now) => {
 initScreens({
   onAnyClick: () => audio.sfxUiClick(),
   play: openDifficultySelect,
+  tutorial: openTutorial,
   daily: openDaily,
   armory: openArmory,
   achievements: openAchievements,

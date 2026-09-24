@@ -1,5 +1,11 @@
 // Versioned, defensively-parsed save data. Corrupt/foreign localStorage
-// content must never crash the game -- it falls back to fresh defaults.
+// content -- or a hand-edited/malicious import string, which round-trips
+// through the same migrate() path -- must never crash the game or let an
+// out-of-range numeric field poison downstream arithmetic (a level far
+// past a track's real max can blow stats up toward Infinity, which then
+// shows as NaN in HP/XP bar scaleX() and other rendering).
+import { META_UPGRADES, ALLY_META_UPGRADES } from "../game/upgrades.js";
+import { MAX_ASCENSION } from "../game/ascension.js";
 
 const KEY = "novacore.save.v1";
 const SCHEMA_VERSION = 1;
@@ -60,19 +66,51 @@ function migrate(data) {
   const numericFields = ["cores", "totalCoresEverEarned", "chestsOpened", "totalRuns", "bestSurvivalSeconds", "bestKills", "ascensionLevel"];
   for (const field of numericFields) {
     const n = Number(merged[field]);
-    merged[field] = Number.isFinite(n) ? n : base[field];
+    // Non-negative, not just finite -- a negative gold/kill/time count is
+    // never legitimate and a huge magnitude in either direction is exactly
+    // the kind of value that later blows a stat multiplier up toward
+    // Infinity, so every one of these tracks a real lower bound of 0.
+    merged[field] = Number.isFinite(n) && n >= 0 ? n : base[field];
   }
-  merged.ascensionLevel = Math.max(0, Math.min(10, Math.round(merged.ascensionLevel)));
-  for (const key of Object.keys(merged.upgrades)) {
+  merged.ascensionLevel = Math.max(0, Math.min(MAX_ASCENSION, Math.round(merged.ascensionLevel)));
+  // Each meta-upgrade level directly multiplies a live gameplay stat in
+  // recomputeStats() with no cap of its own (the armory UI only *stops
+  // offering new purchases* past def.max -- it never re-validates a level
+  // that's already on the save). An import string with e.g.
+  // upgrades.maxHp far past its real max: 10 would otherwise slip through
+  // the finite-number check above unclamped and could eventually push a
+  // stat to Infinity, which shows up as NaN on the HP/XP bars. Rebuilt from
+  // only the keys META_UPGRADES/ALLY_META_UPGRADES actually define (not
+  // whatever keys happened to survive the shallow merge above) so a made-up
+  // key can't ride along with no real max to clamp against.
+  const cleanUpgrades = {};
+  for (const key of Object.keys(base.upgrades)) {
     const n = Number(merged.upgrades[key]);
-    merged.upgrades[key] = Number.isFinite(n) ? n : base.upgrades[key];
+    const max = META_UPGRADES[key].max;
+    cleanUpgrades[key] = Number.isFinite(n) ? Math.max(0, Math.min(max, Math.round(n))) : base.upgrades[key];
   }
-  for (const key of Object.keys(merged.allyUpgrades)) {
+  merged.upgrades = cleanUpgrades;
+  const cleanAllyUpgrades = {};
+  for (const key of Object.keys(base.allyUpgrades)) {
     const n = Number(merged.allyUpgrades[key]);
-    merged.allyUpgrades[key] = Number.isFinite(n) ? n : base.allyUpgrades[key];
+    const max = ALLY_META_UPGRADES[key].max;
+    cleanAllyUpgrades[key] = Number.isFinite(n) ? Math.max(0, Math.min(max, Math.round(n))) : base.allyUpgrades[key];
   }
+  merged.allyUpgrades = cleanAllyUpgrades;
   if (!Array.isArray(merged.unlockedCharacters)) merged.unlockedCharacters = base.unlockedCharacters;
   if (!Array.isArray(merged.unlockedWeapons)) merged.unlockedWeapons = base.unlockedWeapons;
+
+  // Volume settings feed straight into AudioParam.gain.value (audio.js) with
+  // no clamp of its own -- an out-of-[0,1] value there isn't a crash, it's
+  // an unexpectedly deafening one. Import strings are meant to be pasted
+  // from wherever a player got them (a forum post, a friend), so a crafted
+  // one setting these far past 1 is a real, cheap-to-fix nuisance to guard
+  // against, not just a theoretical one.
+  const volumeFields = ["masterVolume", "musicVolume", "sfxVolume"];
+  for (const field of volumeFields) {
+    const n = Number(merged.settings[field]);
+    merged.settings[field] = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : base.settings[field];
+  }
 
   return merged;
 }

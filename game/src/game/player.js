@@ -7,11 +7,11 @@ import { applyAscensionBonuses } from "./ascension.js";
 // AoE kill's worth of XP gems and blow through the entire weapon/passive
 // pool in the first few minutes, hitting the "nothing left to offer" wall
 // far earlier than the run's actual difficulty ramp justified.
-export function xpToNext(level) {
-  return Math.floor(8 + level * 7 + Math.pow(level, 1.85));
+export function xpToNext(level, mult = 1) {
+  return Math.floor((8 + level * 7 + Math.pow(level, 1.85)) * mult);
 }
 
-export function createPlayer(charDef, meta) {
+export function createPlayer(charDef, meta, xpMult = 1) {
   const player = {
     x: 0,
     y: 0,
@@ -22,7 +22,8 @@ export function createPlayer(charDef, meta) {
     color: charDef.color,
     level: 1,
     xp: 0,
-    xpNext: xpToNext(1),
+    xpMult,
+    xpNext: xpToNext(1, xpMult),
     hp: 100,
     maxHp: 100,
     invuln: 0,
@@ -108,7 +109,7 @@ export function gainXp(player, amount, onLevelUp) {
   while (player.xp >= player.xpNext) {
     player.xp -= player.xpNext;
     player.level += 1;
-    player.xpNext = xpToNext(player.level);
+    player.xpNext = xpToNext(player.level, player.xpMult || 1);
     leveled = true;
   }
   if (leveled) onLevelUp?.();

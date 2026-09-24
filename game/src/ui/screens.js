@@ -1,6 +1,6 @@
 import { CHARACTER_LIST, isCharacterUnlocked } from "../game/characters.js";
-import { PASSIVES } from "../game/passives.js";
-import { WEAPONS } from "../game/weapons.js";
+import { PASSIVES, PASSIVE_LIST } from "../game/passives.js";
+import { WEAPONS, WEAPON_LIST } from "../game/weapons.js";
 import { META_UPGRADES, ALLY_META_UPGRADES, upgradeCost } from "../game/upgrades.js";
 import { ACHIEVEMENTS } from "../game/achievements.js";
 import { OVERFLOW_OPTIONS, REVIVE_OPTIONS } from "../game/levelup-options.js";
@@ -37,6 +37,7 @@ const SCREEN_IDS = [
   "screen-warsetup",
   "screen-codex",
   "screen-difficulty",
+  "screen-tutorial",
 ];
 
 export function hideAllScreens() {
@@ -509,6 +510,115 @@ export function renderCodex(meta, onAllyUpgrade) {
       shape: { kind: "boss", shapeName: boss.shape, color: boss.color },
     });
     bossGrid.appendChild(card);
+  }
+}
+
+// ---------------- Tutorial ("How to Play") ----------------
+const TUTORIAL_CONTROLS = [
+  { label: "Move", keys: "WASD / Arrow Keys / Left Stick / On-screen Joystick" },
+  { label: "Dash (brief i-frames)", keys: "Space or Shift / Gamepad A / Cross" },
+  { label: "Pause", keys: "Esc or P / Gamepad Start" },
+  { label: "Aim & Fire", keys: "Automatic -- every weapon targets the nearest enemy on its own. Just move." },
+];
+
+const TUTORIAL_LOOP = [
+  "Survive. Enemies spawn continuously and get more numerous and varied the longer you last -- your only jobs are to stay alive and keep your build growing.",
+  "Kill things for XP gems, then pick them up (or let Pickup Radius passives do it for you). Filling the XP bar levels you up and pauses the action so you can pick a new weapon, a passive, or level up one you already have.",
+  "Level a weapon high enough (with its paired passive maxed) and it evolves into a stronger form -- shown as a card border glow and a name change on the weapon tray.",
+  "A boss spawns roughly every 4.5 minutes. Beating all 4 in a row is a full \"Cycle Complete\" run.",
+  "Supply Caches (chests) and Overdrive pickups appear on a timer -- chests offer a small choice of bonus cards, Overdrive is a temporary power spike.",
+  "Cores bank at Game Over (or when you voluntarily Overload Core mid-run) and buy permanent upgrades and new characters in the Armory -- progress persists between runs even if the run itself doesn't.",
+];
+
+const TUTORIAL_RARITY = [
+  { id: "common", label: "Common", color: "#a3a3a3", pct: 50, blurb: "One clean stat bump. The backbone of most builds -- expect to see a lot of these." },
+  { id: "uncommon", label: "Uncommon", color: "#4ade80", pct: 20, blurb: "Two stats combined, a tradeoff (more of one thing for less of another), or a trigger-based effect." },
+  { id: "rare", label: "Rare", color: "#7dd3fc", pct: 20, blurb: "A stronger, more specific effect. Planned for a future update -- not in the pool yet." },
+  { id: "elite", label: "Elite", color: "#facc15", pct: 10, blurb: "A build-defining mechanic with a real cost. Planned for a future update -- not in the pool yet." },
+];
+
+export function renderTutorial() {
+  const controlsBody = el("tutorial-controls");
+  clearChildren(controlsBody);
+  for (const c of TUTORIAL_CONTROLS) {
+    const row = document.createElement("div");
+    row.className = "tutorial-row";
+    const label = document.createElement("div");
+    label.className = "tutorial-row-label";
+    label.textContent = c.label;
+    const keys = document.createElement("div");
+    keys.className = "tutorial-row-keys";
+    keys.textContent = c.keys;
+    row.append(label, keys);
+    controlsBody.appendChild(row);
+  }
+
+  const loopBody = el("tutorial-loop");
+  clearChildren(loopBody);
+  for (const line of TUTORIAL_LOOP) {
+    const p = document.createElement("p");
+    p.className = "tutorial-p";
+    p.textContent = line;
+    loopBody.appendChild(p);
+  }
+
+  const weaponGrid = el("tutorial-weapons");
+  clearChildren(weaponGrid);
+  for (const w of WEAPON_LIST) {
+    weaponGrid.appendChild(
+      makeCard({
+        icon: w.icon,
+        name: w.name,
+        desc: w.desc(1),
+        meta: w.evolution ? `Evolves into: ${w.evolution.name}` : "Max level, no evolution",
+        accent: w.color,
+      })
+    );
+  }
+
+  const rarityBody = el("tutorial-rarity");
+  clearChildren(rarityBody);
+  for (const r of TUTORIAL_RARITY) {
+    const row = document.createElement("div");
+    row.className = "tutorial-rarity-row";
+    row.style.borderColor = r.color;
+    const head = document.createElement("div");
+    head.className = "tutorial-rarity-head";
+    head.style.color = r.color;
+    head.textContent = `${r.label} -- target ${r.pct}% of draws`;
+    const blurb = document.createElement("div");
+    blurb.className = "tutorial-p";
+    blurb.textContent = r.blurb;
+    row.append(head, blurb);
+    rarityBody.appendChild(row);
+  }
+
+  const enemyGrid = el("tutorial-enemies");
+  clearChildren(enemyGrid);
+  for (const enemy of ENEMY_LIST) {
+    enemyGrid.appendChild(
+      makeCard({
+        icon: enemy.icon,
+        name: enemy.name,
+        desc: enemy.desc,
+        accent: enemy.color,
+        shape: { kind: "unit", shapeName: enemy.shape, color: enemy.color },
+      })
+    );
+  }
+
+  const allyGrid = el("tutorial-allies");
+  clearChildren(allyGrid);
+  for (const ally of ALLY_LIST) {
+    allyGrid.appendChild(
+      makeCard({
+        icon: ally.icon,
+        name: ally.name,
+        desc: `${ally.desc} Unlock via: ${ally.unlockHint}.`,
+        accent: ally.color,
+        shape: { kind: "ally", shapeName: ally.id, color: ally.color },
+      })
+    );
   }
 }
 

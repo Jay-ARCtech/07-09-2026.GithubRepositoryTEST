@@ -40,7 +40,8 @@ import { META_UPGRADES, ALLY_META_UPGRADES, upgradeCost, computeCoresEarned } fr
 import { generateOptions } from "./game/levelup-options.js";
 import { ASCENSION_TIERS, canAscend, ascend } from "./game/ascension.js";
 import { PASSIVE_LIST } from "./game/passives.js";
-import { getDifficulty, DIFFICULTY_LIST } from "./game/difficulty.js";
+import { getDifficulty } from "./game/difficulty.js";
+import { getArenaPalette, DEFAULT_ARENA_PALETTE } from "./game/celestialBodies.js";
 
 import { setHudVisible, updateHud, showToast } from "./ui/hud.js";
 import {
@@ -57,7 +58,7 @@ import {
   renderAscension,
   renderWarSetup,
   renderCodex,
-  renderDifficultySelect,
+  renderPlanetSelect,
   renderTutorial,
   setMenuBestLabel,
 } from "./ui/screens.js";
@@ -125,11 +126,13 @@ function openTutorial() {
 
 function openDifficultySelect() {
   gameState = "difficulty";
-  renderDifficultySelect(DIFFICULTY_LIST, (id) => {
+  showScreen("screen-difficulty");
+  // showScreen first: renderPlanetSelect() reads the portal button's live
+  // getBoundingClientRect(), which is 0x0 while the screen is still hidden.
+  renderPlanetSelect(pendingDifficultyId, (id) => {
     pendingDifficultyId = id;
     openCharSelect();
   });
-  showScreen("screen-difficulty");
 }
 
 function openCharSelect() {
@@ -268,7 +271,11 @@ function startRun(charId, { daily = false, war = false, empireCount = 4, difficu
   // fallback. Only a plain Survival run carries a real difficultyId.
   world.difficultyId = war || daily ? null : difficultyId;
   world.difficultyDef = getDifficulty(world.difficultyId || "hard");
-  scenery = buildArenaScenery(world, world.difficultyDef.obstacleMult);
+  // The celestial body picked on the Planet Select screen recolors the
+  // whole arena to match (see scenery.js/renderWorld()) -- War Mode/Daily
+  // never set a real difficultyId, so they fall back to today's palette.
+  world.arenaPalette = getArenaPalette(world.difficultyId);
+  scenery = buildArenaScenery(world, world.difficultyDef.obstacleMult, world.arenaPalette);
   world._onEnemyDamaged = (e) => {
     particles.spawnBurst(e.x, e.y, "#ffffff", 3, { speed: 80, life: 0.2 });
   };
@@ -890,7 +897,8 @@ function drawEntityGlow(c, x, y, radius, color, alpha = 1) {
 function renderWorld() {
   const w = window.innerWidth,
     h = window.innerHeight;
-  ctx.fillStyle = "#05030c";
+  const palette = world?.arenaPalette || DEFAULT_ARENA_PALETTE;
+  ctx.fillStyle = palette.bg;
   ctx.fillRect(0, 0, w, h);
   if (!world || !player) return;
 
@@ -900,9 +908,10 @@ function renderWorld() {
   ctx.scale(camera.zoom, camera.zoom);
   ctx.translate(-player.x, -player.y);
 
-  // arena boundary + soft grid for spatial readability
-  ctx.strokeStyle = "rgba(0,240,255,0.3)";
-  ctx.shadowColor = "rgba(0,240,255,0.6)";
+  // arena boundary + soft grid for spatial readability -- recolored to
+  // match the chosen celestial body's palette (world.arenaPalette).
+  ctx.strokeStyle = palette.ring;
+  ctx.shadowColor = palette.ring;
   ctx.shadowBlur = 12;
   ctx.lineWidth = 4;
   ctx.beginPath();
@@ -910,7 +919,7 @@ function renderWorld() {
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  ctx.strokeStyle = "rgba(255,43,214,0.05)";
+  ctx.strokeStyle = palette.grid;
   ctx.lineWidth = 1;
   const gridSize = 120;
   const viewR = 900 / camera.zoom;
@@ -1232,6 +1241,8 @@ startLoop((dt, now) => {
     window.__NOVA_DEBUG__ = {
       gameState,
       mode: world?.mode,
+      difficultyId: world?.difficultyId,
+      arenaPalette: world?.arenaPalette,
       time: world?.time,
       enemyCount: world?.enemies?.length,
       enemyTypes: typeTally,

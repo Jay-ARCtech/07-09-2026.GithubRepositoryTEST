@@ -10,8 +10,14 @@
 // would consume rolls from the *gameplay* random stream and silently change
 // enemy spawns/loot for a given seed, breaking Daily Challenge reproducibility.
 import { RNG, TAU, clamp } from "./utils.js";
+import { DEFAULT_ARENA_PALETTE } from "../game/celestialBodies.js";
 
-export function buildArenaScenery(world, obstacleMult = 1) {
+// `palette` recolors the whole arena (billboards/pylons/far lights, plus the
+// ring/grid/background main.js's renderWorld() paints) to match whichever
+// celestial body the player picked on the Planet Select screen -- defaults
+// to today's cyan/magenta look for War Mode/the Daily Challenge, which never
+// set world.difficultyId and so never resolve to a real body.
+export function buildArenaScenery(world, obstacleMult = 1, palette = DEFAULT_ARENA_PALETTE) {
   const rng = new RNG((world.seed ^ 0x5ea9014) >>> 0);
   const billboards = [];
   // Gauntlet difficulty raises obstacleMult to pack the rooftop with far
@@ -29,7 +35,7 @@ export function buildArenaScenery(world, obstacleMult = 1) {
       w: rng.range(46, 78),
       h: rng.range(120, 210),
       rot: rng.range(0, TAU),
-      color: rng.pick(["#00f0ff", "#ff2bd6", "#7c3aed", "#fbbf24", "#34d399"]),
+      color: rng.pick(palette.billboardColors),
       bars,
       flickerSeed: rng.range(0, TAU),
     });
@@ -38,7 +44,7 @@ export function buildArenaScenery(world, obstacleMult = 1) {
   const pylonCount = 10;
   const pylons = Array.from({ length: pylonCount }, (_, i) => {
     const ang = (TAU / pylonCount) * i;
-    return { x: Math.cos(ang) * world.arenaRadius, y: Math.sin(ang) * world.arenaRadius, ang };
+    return { x: Math.cos(ang) * world.arenaRadius, y: Math.sin(ang) * world.arenaRadius, ang, color: palette.pylonColor };
   });
 
   const farLightCount = 10;
@@ -46,7 +52,7 @@ export function buildArenaScenery(world, obstacleMult = 1) {
     ang: rng.range(0, TAU),
     r: world.arenaRadius * rng.range(1.15, 1.6),
     speed: rng.range(0.02, 0.06) * (rng.chance(0.5) ? 1 : -1),
-    color: rng.pick(["#00f0ff", "#ff2bd6", "#fbbf24"]),
+    color: rng.pick(palette.farLightColors),
   }));
 
   return { billboards, pylons, farLights };
@@ -88,8 +94,8 @@ function drawPylon(ctx, p, t) {
   const pulse = 0.6 + 0.4 * Math.sin(t * 3 + p.ang * 4);
   ctx.fillStyle = "rgba(10,6,22,0.9)";
   ctx.fillRect(-6, -22, 12, 44);
-  ctx.fillStyle = "#00f0ff";
-  ctx.shadowColor = "#00f0ff";
+  ctx.fillStyle = p.color;
+  ctx.shadowColor = p.color;
   ctx.shadowBlur = 14 * pulse;
   ctx.globalAlpha = 0.6 + 0.4 * pulse;
   ctx.beginPath();

@@ -10,6 +10,9 @@ import { BOSS_LIST } from "../game/bosses.js";
 import { MIN_EMPIRES, MAX_EMPIRES } from "../game/warmode.js";
 import { formatTime } from "../engine/utils.js";
 import { drawUnitShape, drawBossShape, drawAllyShape } from "../engine/scenery.js";
+import { DIFFICULTY_LIST } from "../game/difficulty.js";
+import { CELESTIAL_BODIES, celestialFacts } from "../game/celestialBodies.js";
+import { animateValue, computeTiltTarget, approachTilt, buildMaskPoints, pathFromPoints, drawShade, drawCelestialScene } from "../engine/portal.js";
 
 function resolveOptionDef(opt) {
   if (opt.kind === "weapon") return WEAPONS[opt.id];
@@ -622,75 +625,238 @@ export function renderTutorial() {
   }
 }
 
-// ---------------- Difficulty select (12-card 3D-tilt carousel) ----------------
-// A lightweight per-card mouse-parallax tilt: each card tracks the cursor
-// offset from its own center, smoothly damps toward it (inertia, not a
-// snap), and self-stops once the screen is hidden rather than needing
-// main.js to remember to cancel it on every possible way of navigating away.
-let difficultyTiltFrame = null;
+// ---------------- Planet Select (cinematic destination portal) ----------------
+// Each of the 12 Survival difficulties is a celestial body (celestialBodies.js).
+// A single fixed canvas paints a rounded-rectangle "portal" window that tilts
+// toward the pointer via a fake-3D projection (engine/portal.js) and clips
+// into that body's procedural scene, drawn screen-locked so the window reads
+// as looking *through* a stationary destination rather than a textured card.
+// Clicking a sidebar entry swaps which body is loaded (a quick close/reopen
+// of the window); clicking the portal itself commits -- expands the window
+// to fill the screen, then hands off to onDeploy(id).
+let planetState = null; // lazily constructed on first renderPlanetSelect()
 
-function attachDifficultyTilt(cards) {
-  if (difficultyTiltFrame) cancelAnimationFrame(difficultyTiltFrame);
-  const state = cards.map(() => ({ tx: 0, ty: 0, rx: 0, ry: 0, hover: false }));
-  cards.forEach((card, i) => {
-    card.addEventListener("mousemove", (e) => {
-      const rect = card.getBoundingClientRect();
-      state[i].tx = (e.clientX - rect.left) / rect.width - 0.5;
-      state[i].ty = (e.clientY - rect.top) / rect.height - 0.5;
-      state[i].hover = true;
-    });
-    card.addEventListener("mouseleave", () => {
-      state[i].hover = false;
-      state[i].tx = 0;
-      state[i].ty = 0;
-    });
-  });
-
+function buildPlanetState() {
+  const canvas = el("planet-scene-canvas");
+  const ctx = canvas.getContext("2d");
   const screenEl = el("screen-difficulty");
-  function tick() {
-    if (screenEl.classList.contains("hidden")) return; // navigated away -- stop rather than spin forever
-    for (let i = 0; i < cards.length; i++) {
-      const s = state[i];
-      s.rx += (-s.ty * 12 - s.rx) * 0.12;
-      s.ry += (s.tx * 14 - s.ry) * 0.12;
-      const z = s.hover ? 14 : 0;
-      cards[i].style.transform = `rotateX(${s.rx.toFixed(2)}deg) rotateY(${s.ry.toFixed(2)}deg) translateZ(${z}px)`;
-    }
-    difficultyTiltFrame = requestAnimationFrame(tick);
+  const portalBtn = el("planet-portal");
+  const cursorEl = el("planet-cursor");
+
+  const state = {
+    canvas,
+    ctx,
+    screenEl,
+    portalBtn,
+    cursorEl,
+    currentId: null,
+    rotX: 0,
+    rotY: 0,
+    targetX: 0,
+    targetY: 0,
+    maskScale: 1,
+    expansion: 0,
+    transitionActive: false,
+    canvasOpacity: 1,
+    busy: false,
+    sceneStart: performance.now(),
+    outgoingId: null,
+    cursorX: -100,
+    cursorY: -100,
+    cursorTargetX: -100,
+    cursorTargetY: -100,
+    cursorSeen: false,
+    rafId: null,
+    onDeploy: null,
+    lastFrame: performance.now(),
+  };
+
+  function resize() {
+    const d = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(window.innerWidth * d);
+    canvas.height = Math.floor(window.innerHeight * d);
+    canvas.style.width = window.innerWidth + "px";
+    canvas.style.height = window.innerHeight + "px";
+    ctx.setTransform(d, 0, 0, d, 0, 0);
   }
-  difficultyTiltFrame = requestAnimationFrame(tick);
+  window.addEventListener("resize", resize);
+  resize();
+
+  screenEl.addEventListener("pointermove", (e) => {
+    const t = computeTiltTarget(e.clientX, e.clientY, window.innerWidth, window.innerHeight);
+    state.targetX = t.targetX;
+    state.targetY = t.targetY;
+    state.cursorTargetX = e.clientX;
+    state.cursorTargetY = e.clientY;
+    if (!state.cursorSeen) {
+      state.cursorSeen = true;
+      cursorEl.classList.add("is-visible");
+    }
+  });
+  screenEl.addEventListener("pointerleave", () => {
+    state.targetX = 0;
+    state.targetY = 0;
+    state.cursorSeen = false;
+    cursorEl.classList.remove("is-visible");
+  });
+  portalBtn.addEventListener("pointerenter", () => cursorEl.classList.add("is-enter"));
+  portalBtn.addEventListener("pointerleave", () => cursorEl.classList.remove("is-enter"));
+  portalBtn.addEventListener("click", () => travelToCurrent(state));
+
+  function frame(now) {
+    const dt = Math.min(40, now - state.lastFrame);
+    state.lastFrame = now;
+    state.rotX = approachTilt(state.rotX, state.targetX, dt);
+    state.rotY = approachTilt(state.rotY, state.targetY, dt);
+    state.cursorX += (state.cursorTargetX - state.cursorX) * 0.2;
+    state.cursorY += (state.cursorTargetY - state.cursorY) * 0.2;
+    cursorEl.style.transform = `translate3d(${state.cursorX}px, ${state.cursorY}px, 0)`;
+    drawPlanetFrame(state, now);
+    if (!screenEl.classList.contains("hidden")) state.rafId = requestAnimationFrame(frame);
+    else state.rafId = null;
+  }
+  state.startLoop = () => {
+    if (state.rafId == null) {
+      state.lastFrame = performance.now();
+      state.rafId = requestAnimationFrame(frame);
+    }
+  };
+
+  return state;
 }
 
-export function renderDifficultySelect(difficultyList, onPick) {
-  const grid = el("difficulty-grid");
-  clearChildren(grid);
-  const cardEls = [];
-  for (const diff of difficultyList) {
-    const card = document.createElement("div");
-    card.className = "difficulty-card";
-    card.style.borderColor = diff.color;
-    card.style.boxShadow = `0 0 22px ${diff.color}33, inset 0 1px 0 rgba(255,255,255,0.06)`;
+function drawPlanetFrame(state, now) {
+  const { ctx } = state;
+  const w = window.innerWidth,
+    h = window.innerHeight;
+  ctx.clearRect(0, 0, w, h);
 
-    const icon = document.createElement("div");
-    icon.className = "difficulty-icon";
-    icon.textContent = diff.icon;
-    icon.style.color = diff.color;
+  const rect = state.portalBtn.getBoundingClientRect();
+  if (rect.width < 1 || rect.height < 1) return;
+  const rectCx = rect.left + rect.width / 2;
+  const rectCy = rect.top + rect.height / 2;
+  const e = state.expansion;
+  const cx = rectCx + (w / 2 - rectCx) * e;
+  const cy = rectCy + (h / 2 - rectCy) * e;
+  const baseW = rect.width + (w - rect.width) * e;
+  const baseH = rect.height + (h - rect.height) * e;
+  const scale = e ? 1 : state.maskScale;
+  const winW = baseW * scale,
+    winH = baseH * scale;
+  const r = 90 * (1 - e) * scale;
+  const rX = state.rotX * (1 - e);
+  const rY = state.rotY * (1 - e);
+  if (winW <= 1 || winH <= 1) return;
 
-    const name = document.createElement("div");
-    name.className = "difficulty-name";
-    name.style.color = diff.color;
-    name.textContent = diff.name;
+  const path = pathFromPoints(buildMaskPoints(winW, winH, r, rX, rY, cx, cy));
+  ctx.save();
+  ctx.globalAlpha = state.canvasOpacity;
+  ctx.clip(path);
+  ctx.fillStyle = "#030303";
+  ctx.fillRect(0, 0, w, h);
+  const body = CELESTIAL_BODIES[state.transitionActive ? state.outgoingId : state.currentId] || CELESTIAL_BODIES[state.currentId];
+  if (body) drawCelestialScene(ctx, body, w, h, (now - state.sceneStart) / 1000);
+  if (state.transitionActive) drawShade(ctx, w, h);
+  ctx.restore();
+}
 
-    const tagline = document.createElement("div");
-    tagline.className = "difficulty-tagline";
-    tagline.textContent = diff.tagline;
+function retrigger(elm, className) {
+  elm.classList.remove(className);
+  void elm.offsetWidth;
+  elm.classList.add(className);
+}
 
-    card.append(icon, name, tagline);
-    card.addEventListener("click", () => onPick(diff.id));
-    grid.appendChild(card);
-    cardEls.push(card);
+function updatePlanetPanels(id) {
+  const body = CELESTIAL_BODIES[id];
+  if (!body) return;
+  document.documentElement.style.setProperty("--planet-accent", body.glow);
+  el("planet-number").textContent = `[${body.number}]`;
+  el("planet-name").textContent = body.name;
+  el("planet-portal").setAttribute("aria-label", `Deploy to ${body.name}`);
+  el("planet-select-title").textContent = body.name.toUpperCase();
+
+  const factsEl = el("planet-facts");
+  clearChildren(factsEl);
+  for (const [k, v] of celestialFacts(id)) {
+    const row = document.createElement("div");
+    row.className = "planet-fact";
+    const dt = document.createElement("dt");
+    dt.textContent = k;
+    const dd = document.createElement("dd");
+    dd.textContent = v;
+    row.append(dt, dd);
+    factsEl.appendChild(row);
   }
-  attachDifficultyTilt(cardEls);
+
+  const sidebar = el("planet-sidebar");
+  clearChildren(sidebar);
+  for (const diff of DIFFICULTY_LIST) {
+    const planetBody = CELESTIAL_BODIES[diff.id];
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "planet-item" + (diff.id === id ? " active" : "");
+    const num = document.createElement("span");
+    num.className = "planet-item-number";
+    num.textContent = planetBody.number;
+    const name = document.createElement("span");
+    name.textContent = planetBody.name;
+    item.append(num, name);
+    if (diff.id !== id) item.addEventListener("click", () => switchPlanet(id, diff.id));
+    sidebar.appendChild(item);
+  }
+  retrigger(sidebar, "is-switching");
+  retrigger(el("planet-portal-heading"), "is-visible");
+  retrigger(el("planet-select-title"), "is-visible");
+  retrigger(el("planet-facts"), "is-visible");
+}
+
+async function switchPlanet(fromId, toId) {
+  if (!planetState || planetState.busy) return;
+  planetState.busy = true;
+  await animateValue((v) => (planetState.maskScale = 1 - v), 260);
+  planetState.currentId = toId;
+  updatePlanetPanels(toId);
+  planetState.sceneStart = performance.now();
+  await animateValue((v) => (planetState.maskScale = v), 520);
+  planetState.busy = false;
+}
+
+async function travelToCurrent(state) {
+  if (state.busy || !state.onDeploy) return;
+  state.busy = true;
+  state.targetX = 0;
+  state.targetY = 0;
+  state.screenEl.classList.add("is-transitioning");
+  state.transitionActive = true;
+  state.outgoingId = state.currentId;
+  state.canvasOpacity = 1;
+  const deployId = state.currentId;
+  try {
+    await animateValue((v) => (state.expansion = v), 1100);
+  } finally {
+    state.onDeploy(deployId);
+  }
+}
+
+// Called every time the screen opens (Play -> Planet Select). `initialId`
+// is which difficulty/body should be pre-loaded in the portal (whatever was
+// picked last time, or "hard" on a fresh session); onDeploy(id) fires once
+// the player commits by clicking the portal.
+export function renderPlanetSelect(initialId, onDeploy) {
+  if (!planetState) planetState = buildPlanetState();
+  const s = planetState;
+  s.onDeploy = onDeploy;
+  s.busy = false;
+  s.expansion = 0;
+  s.maskScale = 1;
+  s.transitionActive = false;
+  s.canvasOpacity = 1;
+  s.currentId = CELESTIAL_BODIES[initialId] ? initialId : "hard";
+  s.rotX = s.rotY = s.targetX = s.targetY = 0;
+  s.sceneStart = performance.now();
+  s.screenEl.classList.remove("is-transitioning");
+  updatePlanetPanels(s.currentId);
+  s.startLoop();
 }
 
 export function setMenuBestLabel(meta) {

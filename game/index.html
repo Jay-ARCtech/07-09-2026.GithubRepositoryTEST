@@ -60,18 +60,40 @@
         <button class="btn" data-action="settings">Settings</button>
         <button class="btn hidden" id="btn-quit" data-action="quit">Quit</button>
       </div>
-      <div class="menu-footer">v1.8.0 &middot; <span id="best-run-label"></span></div>
+      <div class="menu-footer">v1.9.0 &middot; <span id="best-run-label"></span></div>
     </div>
   </div>
 
-  <div id="screen-difficulty" class="screen hidden">
-    <h2>Select Difficulty</h2>
-    <p class="subtitle">Twelve ways to run the horde. Pick one -- you can change it next time.</p>
-    <div class="difficulty-viewport">
-      <div id="difficulty-grid" class="difficulty-grid"></div>
+  <div id="screen-difficulty" class="screen screen-planet-select hidden">
+    <canvas id="planet-scene-canvas" class="planet-scene-canvas" aria-hidden="true"></canvas>
+    <div class="planet-shade" aria-hidden="true"></div>
+
+    <div class="planet-header">
+      <h2>Choose Your Destination</h2>
+      <p class="subtitle">Twelve worlds. Twelve ways to run the horde.</p>
     </div>
-    <div class="screen-actions">
+
+    <aside class="planet-sidebar" id="planet-sidebar" aria-label="Destinations"></aside>
+
+    <section class="planet-portal-wrap" aria-label="Selected destination">
+      <div class="planet-portal-heading" id="planet-portal-heading">
+        <span id="planet-number">[01]</span>
+        <strong id="planet-name">Earth</strong>
+      </div>
+      <button class="planet-portal" id="planet-portal" type="button" aria-label="Deploy to Earth"></button>
+    </section>
+
+    <section class="planet-facts-panel" aria-live="polite">
+      <h1 id="planet-select-title">EARTH</h1>
+      <div id="planet-facts" class="planet-facts"></div>
+    </section>
+
+    <div class="screen-actions planet-back-actions">
       <button class="btn" data-action="back-to-menu">Back</button>
+    </div>
+
+    <div class="planet-cursor" id="planet-cursor" aria-hidden="true">
+      <span class="planet-cursor-orbit"></span><span class="planet-cursor-dot"></span><span class="planet-cursor-label">Deploy</span>
     </div>
   </div>
 
@@ -100,8 +122,9 @@
       <p class="tutorial-p">
         Survival mode offers 12 selectable difficulties, from Easy (fewer enemies, softer hits, a shorter level-up
         climb, and tougher troops held back far longer) up through Hard, Nightmare, and further flavor difficulties
-        like Clone, Swarm, and Elite Uprising. Pick one from the Difficulty Select screen right after hitting Play.
-        War Mode and the Daily Challenge always run at Hard-equivalent tuning.
+        like Clone, Swarm, and Elite Uprising. Each one is a different destination on the Planet Select screen right
+        after hitting Play -- picking one also recolors the battle arena itself to match. War Mode and the Daily
+        Challenge always run at Hard-equivalent tuning.
       </p>
     </div>
     <div class="screen-actions">

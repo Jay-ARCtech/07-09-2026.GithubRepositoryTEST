@@ -198,23 +198,135 @@ textarea#save-string { width: 100%; height: 70px; background: #05030c; color: va
 .tutorial-rarity-row { border: 1px solid; border-radius: 8px; padding: 10px 14px; background: var(--panel); }
 .tutorial-rarity-head { font-weight: 800; letter-spacing: 0.5px; margin-bottom: 4px; }
 
-/* Difficulty select: a 3D-perspective card grid where each card tilts
-   toward the cursor with damped inertia (see screens.js's attachDifficultyTilt) --
-   perspective lives on the viewport wrapper, preserve-3d on each card so the
-   rotateX/rotateY/translateZ it's given actually reads as depth. */
-.difficulty-viewport { perspective: 1350px; width: min(1100px, 94vw); }
-.difficulty-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; max-height: 64vh; overflow-y: auto; padding: 10px; }
-.difficulty-card {
-  position: relative; cursor: pointer; border-radius: 14px; border: 1px solid rgba(255,255,255,0.14);
-  background: linear-gradient(160deg, rgba(20,10,38,0.92), rgba(6,3,14,0.96));
-  padding: 18px 16px; display: flex; flex-direction: column; gap: 8px; text-align: left;
-  transform-style: preserve-3d; will-change: transform; transition: box-shadow 0.2s ease;
-  pointer-events: auto;
+/* Planet Select: a cinematic destination picker. A single canvas paints a
+   rounded-rectangle "portal" window that tilts toward the pointer via a
+   fake-3D projection (see engine/portal.js) and clips into a procedurally
+   animated celestial scene for whichever world is currently loaded --
+   picking a planet from the sidebar swaps the scene, clicking the portal
+   itself travels (screens.js drives all of this; the CSS here only lays
+   out the static chrome around it). */
+.screen.screen-planet-select { display: block; padding: 0; overflow: hidden; background: #030208; }
+/* .screen.hidden{display:none} (near the top of this file) and the rule just
+   above both have two-class specificity, so without this the later rule in
+   source order wins regardless of which element actually has .hidden --
+   this screen would stay display:block (and z-index:20, on top of
+   everything) even while "hidden". Three classes beats two, so this keeps
+   hidden always winning for this screen specifically. */
+.screen.screen-planet-select.hidden { display: none; }
+.planet-scene-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
+.planet-shade {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(to bottom, transparent 45%, rgba(0,0,0,0.78) 100%);
 }
-.difficulty-card:hover { box-shadow: 0 0 26px rgba(0,240,255,0.2); }
-.difficulty-icon { font-size: 1.8rem; line-height: 1; }
-.difficulty-name { font-weight: 800; letter-spacing: 0.5px; font-size: 1.05rem; }
-.difficulty-tagline { color: var(--text-dim); font-size: 0.78rem; line-height: 1.35; }
+.screen-planet-select.is-transitioning .planet-header,
+.screen-planet-select.is-transitioning .planet-sidebar,
+.screen-planet-select.is-transitioning .planet-facts-panel,
+.screen-planet-select.is-transitioning .planet-back-actions { opacity: 0; filter: blur(8px); pointer-events: none; }
+.planet-header, .planet-sidebar, .planet-portal-wrap, .planet-facts-panel, .planet-back-actions {
+  position: absolute; z-index: 2; transition: opacity 0.45s ease, filter 0.45s ease;
+}
+
+.planet-header { left: clamp(18px, 3vw, 32px); top: clamp(18px, 3vh, 26px); max-width: 46vw; }
+.planet-header h2 { margin: 0 0 4px; }
+.planet-header .subtitle { margin: 0; max-width: none; }
+
+.planet-sidebar {
+  left: clamp(18px, 3vw, 32px); top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 5px; font-size: 0.85rem;
+  max-height: 66vh; overflow-y: auto; padding-right: 4px;
+}
+.planet-item {
+  display: flex; align-items: center; gap: 7px; min-height: 18px; cursor: pointer; color: var(--text-dim); pointer-events: auto;
+  background: none; border: 0; padding: 3px 0; margin: 0; font: inherit; font-family: var(--font-mono); text-align: left;
+}
+.planet-item:hover { color: var(--text); }
+.planet-item .planet-item-number { font-size: 0.7rem; opacity: 0.6; width: 22px; flex-shrink: 0; }
+.planet-item.active { font-size: 0.98rem; font-weight: 700; color: var(--text); }
+.planet-item.active::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--planet-accent, var(--accent)); box-shadow: 0 0 10px var(--planet-accent, var(--accent)); flex-shrink: 0; }
+.planet-sidebar.is-switching .planet-item { animation: menu-row 0.5s cubic-bezier(0.22,1,0.36,1) both; }
+.planet-sidebar.is-switching .planet-item:nth-child(1) { animation-delay: 0.02s; } .planet-sidebar.is-switching .planet-item:nth-child(2) { animation-delay: 0.04s; }
+.planet-sidebar.is-switching .planet-item:nth-child(3) { animation-delay: 0.06s; } .planet-sidebar.is-switching .planet-item:nth-child(4) { animation-delay: 0.08s; }
+.planet-sidebar.is-switching .planet-item:nth-child(5) { animation-delay: 0.1s; }  .planet-sidebar.is-switching .planet-item:nth-child(6) { animation-delay: 0.12s; }
+.planet-sidebar.is-switching .planet-item:nth-child(7) { animation-delay: 0.14s; } .planet-sidebar.is-switching .planet-item:nth-child(8) { animation-delay: 0.16s; }
+.planet-sidebar.is-switching .planet-item:nth-child(9) { animation-delay: 0.18s; } .planet-sidebar.is-switching .planet-item:nth-child(10) { animation-delay: 0.2s; }
+.planet-sidebar.is-switching .planet-item:nth-child(11) { animation-delay: 0.22s; } .planet-sidebar.is-switching .planet-item:nth-child(12) { animation-delay: 0.24s; }
+@keyframes menu-row { from { opacity: 0.3; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
+
+.planet-portal-wrap { left: 50%; top: 50%; width: min(300px, 30vw); transform: translate(-50%, -55%); text-align: center; }
+.planet-portal-heading {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+  font-size: 0.85rem; color: var(--text-dim); opacity: 0;
+}
+.planet-portal-heading.is-visible { animation: portal-caption 0.7s cubic-bezier(0.22,1,0.36,1) both; }
+.planet-portal-heading strong { font-size: 1rem; color: var(--text); margin-left: 6px; }
+@keyframes portal-caption { from { opacity: 0; filter: blur(6px); transform: translateY(16px); } to { opacity: 1; filter: blur(0); transform: translateY(0); } }
+.planet-portal {
+  cursor: none; display: block; width: 100%; aspect-ratio: 300/330; padding: 0; border-radius: 90px;
+  border: 1px solid var(--planet-accent, rgba(0,240,255,0.3)); background: transparent; pointer-events: auto;
+}
+@media (pointer: coarse) { .planet-portal { cursor: pointer; } }
+
+.planet-facts-panel {
+  left: clamp(24px, 4vw, 48px); right: clamp(24px, 3vw, 40px); bottom: clamp(20px, 3vh, 26px);
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 32px;
+}
+#planet-select-title {
+  font-family: var(--font-mono); font-size: clamp(2.6rem, 8vw, 5.5rem); font-weight: 800; line-height: 0.85;
+  margin: 0; letter-spacing: 1px; color: var(--text); opacity: 0; transform: translateX(-24px);
+  text-shadow: 0 0 26px var(--planet-accent, var(--accent)), 0 4px 20px #000;
+}
+#planet-select-title.is-visible { animation: title-rise 0.85s cubic-bezier(0.16,1,0.3,1) both; }
+@keyframes title-rise { from { opacity: 0; filter: blur(10px); transform: translate(-24px, 30px); } to { opacity: 1; filter: blur(0); transform: translate(-24px, 0); } }
+.planet-facts { width: min(400px, 32vw); }
+.planet-fact { display: grid; grid-template-columns: 128px 1fr; gap: 14px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.1); opacity: 0; }
+.planet-fact:last-child { border-bottom: 0; }
+.planet-fact dt { font-weight: 700; font-size: 0.68rem; letter-spacing: 0.6px; text-transform: uppercase; color: var(--planet-accent, var(--accent)); margin: 0; }
+.planet-fact dd { margin: 0; font-size: 0.82rem; color: var(--text-dim); line-height: 1.35; }
+.planet-facts.is-visible .planet-fact { animation: fact-rise 0.65s cubic-bezier(0.22,1,0.36,1) both; }
+.planet-facts.is-visible .planet-fact:nth-child(1) { animation-delay: 0.15s; } .planet-facts.is-visible .planet-fact:nth-child(2) { animation-delay: 0.28s; }
+.planet-facts.is-visible .planet-fact:nth-child(3) { animation-delay: 0.41s; } .planet-facts.is-visible .planet-fact:nth-child(4) { animation-delay: 0.54s; }
+@keyframes fact-rise { from { opacity: 0; filter: blur(6px); transform: translateY(14px); } to { opacity: 1; filter: blur(0); transform: translateY(0); } }
+
+/* Top-right, not bottom-left -- the giant planet title lives bottom-left
+   and would otherwise sit directly under/over this button. */
+.planet-back-actions { right: clamp(18px, 3vw, 32px); top: clamp(18px, 3vh, 26px); }
+
+/* Custom cursor: only active while hovering the portal itself, so the rest
+   of this screen (sidebar, back button) keeps the normal pointer. */
+.planet-cursor {
+  display: block; position: fixed; left: 0; top: 0; z-index: 30; width: 1px; height: 1px;
+  pointer-events: none; opacity: 0; transition: opacity 0.2s ease;
+}
+.planet-cursor.is-visible { opacity: 1; }
+.planet-cursor-dot, .planet-cursor-orbit { position: absolute; left: 0; top: 0; border-radius: 50%; transform: translate(-50%, -50%); }
+.planet-cursor-dot { width: 10px; height: 10px; background: var(--planet-accent, var(--accent)); }
+.planet-cursor-orbit {
+  width: 34px; height: 34px; border: 1px solid var(--planet-accent, var(--accent)); background: rgba(255,255,255,0.06);
+  transition: transform 0.3s cubic-bezier(0.22,1,0.36,1);
+}
+.planet-cursor.is-enter .planet-cursor-orbit { transform: translate(-50%, -50%) scale(1.18); }
+.planet-cursor-label {
+  position: absolute; top: 24px; left: 0; transform: translateX(-50%) translateY(-4px);
+  font: 0.7rem/1.2 var(--font-mono); text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; opacity: 0;
+  transition: opacity 0.2s ease, transform 0.3s cubic-bezier(0.22,1,0.36,1); color: var(--text);
+}
+.planet-cursor.is-enter .planet-cursor-label { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@media (max-width: 900px) {
+  .planet-portal-wrap { width: min(280px, 48vw); }
+  .planet-facts { width: 42vw; }
+  .planet-fact { grid-template-columns: 100px 1fr; }
+}
+@media (max-width: 640px) {
+  .planet-sidebar { display: none; }
+  .planet-portal-wrap { top: 42%; width: min(230px, 62vw); }
+  .planet-facts-panel { display: block; }
+  .planet-facts { width: 100%; margin-top: 14px; }
+  #planet-select-title { font-size: clamp(2.2rem, 13vw, 3.4rem); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .planet-item, .planet-fact, .planet-portal-heading, #planet-select-title { animation-duration: 0.01ms !important; }
+}
 
 .warsetup-body { display: flex; flex-direction: column; align-items: center; gap: 16px; width: min(560px, 92vw); }
 .warsetup-slider-row { width: 100%; padding: 4px 8px; }

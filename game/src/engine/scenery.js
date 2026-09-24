@@ -9,7 +9,7 @@
 // through its own RNG instance, never world.rng -- reusing world.rng here
 // would consume rolls from the *gameplay* random stream and silently change
 // enemy spawns/loot for a given seed, breaking Daily Challenge reproducibility.
-import { RNG, TAU, clamp } from "./utils.js";
+import { RNG, TAU, clamp, hexToRgba } from "./utils.js";
 import { DEFAULT_ARENA_PALETTE } from "../game/celestialBodies.js";
 
 // `palette` recolors the whole arena (billboards/pylons/far lights, plus the
@@ -23,10 +23,16 @@ export function buildArenaScenery(world, obstacleMult = 1, palette = DEFAULT_ARE
   // Gauntlet difficulty raises obstacleMult to pack the rooftop with far
   // more billboards/pylons to route around; every other difficulty passes
   // the default 1 and gets today's layout unchanged.
+  // Billboards used to spawn at 0.45-0.8x arenaRadius (720-1280 world units
+  // on the default 1600-radius arena), which sits entirely outside the
+  // camera's actual visible radius (~400-650 at zoom 1) -- so in real play
+  // nobody ever saw one, and the "recolored" billboards/pylons doing the
+  // heavy lifting for the per-planet look were invisible from spawn. Pulled
+  // in to 0.16-0.42x so several sit inside view within the first few steps.
   const billboardCount = Math.round(7 * obstacleMult);
   for (let i = 0; i < billboardCount; i++) {
     const ang = (TAU / billboardCount) * i + rng.range(-0.25, 0.25);
-    const r = rng.range(world.arenaRadius * 0.45, world.arenaRadius * 0.8);
+    const r = rng.range(world.arenaRadius * 0.16, world.arenaRadius * 0.42);
     const barCount = rng.int(3, 6);
     const bars = Array.from({ length: barCount }, () => rng.range(0.25, 1));
     billboards.push({
@@ -177,6 +183,183 @@ export function drawArenaGround(ctx, world, scenery, t) {
     ctx.fill();
   }
   ctx.restore();
+}
+
+// ------------------------------------------------------- planet ambience
+// Billboards/pylons alone only carry the "planet" look, and only once the
+// player wanders near one. These layers give the other four celestial
+// `kind`s (moon/asteroidField/nebula/blackHole) their own unmistakable
+// identity that's visible in every frame from the moment a run starts,
+// regardless of where the player is standing.
+
+// Ground craters for the Moon (Clone difficulty): tied to world space via a
+// deterministic per-cell hash (not world.rng, so daily-challenge/gameplay
+// RNG streams stay untouched) so they read as fixed terrain the camera
+// pans over, rather than a screen-space overlay that would slide with it.
+function cellHash(cx, cy, seed) {
+  let h = (cx * 374761393 + cy * 668265263 + seed) | 0;
+  h = (h ^ (h >>> 13)) * 1274126177;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+
+// px/py are the player's live world-space position (world.player is never
+// populated -- the real player object lives outside world.js -- so the
+// caller passes it explicitly rather than this reading a stale null).
+export function drawGroundCraters(ctx, px, py, seed) {
+  const cell = 220;
+  const viewR = 700;
+  const minCx = Math.floor((px - viewR) / cell);
+  const maxCx = Math.floor((px + viewR) / cell);
+  const minCy = Math.floor((py - viewR) / cell);
+  const maxCy = Math.floor((py + viewR) / cell);
+  ctx.save();
+  for (let cx = minCx; cx <= maxCx; cx++) {
+    for (let cy = minCy; cy <= maxCy; cy++) {
+      const roll = cellHash(cx, cy, seed | 0);
+      if (roll > 0.4) continue; // ~40% of cells get a crater
+      const jx = cellHash(cx, cy, (seed | 0) ^ 0x9e3779b9);
+      const jy = cellHash(cx, cy, (seed | 0) ^ 0x85ebca6b);
+      const jr = cellHash(cx, cy, (seed | 0) ^ 0xc2b2ae35);
+      const x = cx * cell + jx * cell,
+        y = cy * cell + jy * cell;
+      const r = 18 + jr * 34;
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = "rgba(0,0,0,0.4)";
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = "rgba(255,255,255,0.1)";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+const ambientRockCache = new Map();
+function getAmbientRocks(seed) {
+  let rocks = ambientRockCache.get(seed);
+  if (!rocks) {
+    const rng = new RNG(seed >>> 0);
+    rocks = Array.from({ length: 26 }, () => {
+      const sides = rng.int(5, 8);
+      const baseR = rng.range(8, 26);
+      const poly = Array.from({ length: sides }, (_, i) => {
+        const a = (TAU / sides) * i;
+        const jitter = rng.range(0.7, 1.15);
+        return { x: Math.cos(a) * baseR * jitter, y: Math.sin(a) * baseR * jitter };
+      });
+      return {
+        x0: rng.next(),
+        y: rng.range(0.05, 0.98),
+        depth: rng.range(0.3, 1),
+        speed: rng.range(10, 34),
+        rotSpeed: rng.range(-0.5, 0.5),
+        rotSeed: rng.range(0, TAU),
+        poly,
+      };
+    });
+    ambientRockCache.set(seed, rocks);
+  }
+  return rocks;
+}
+
+const ambientNebulaCache = new Map();
+function getAmbientNebulaBlobs(seed) {
+  let blobs = ambientNebulaCache.get(seed);
+  if (!blobs) {
+    const rng = new RNG(seed >>> 0);
+    blobs = Array.from({ length: 6 }, () => ({
+      x: rng.range(0.1, 0.9),
+      y: rng.range(0.1, 0.9),
+      r: rng.range(0.22, 0.4),
+      seed: rng.range(0, TAU),
+    }));
+    ambientNebulaCache.set(seed, blobs);
+  }
+  return blobs;
+}
+
+// Screen-space ambience for the four non-"planet" kinds -- drawn every
+// frame at full viewport size, independent of camera position, so it's
+// always visible instead of depending on the player wandering toward
+// world-space scenery. Called after the background fill/glow, before the
+// camera transform. `kind` is CELESTIAL_BODIES[id].kind (null for War
+// Mode/Daily, which fall through to the default cyan/magenta look untouched).
+export function drawArenaAmbience(ctx, w, h, t, kind, palette) {
+  if (kind === "asteroidField") {
+    ctx.save();
+    for (const rock of getAmbientRocks(0x41535431)) {
+      const span = w + 200;
+      const x = ((((rock.x0 * span + t * rock.speed * rock.depth) % span) + span) % span) - 100;
+      const y = rock.y * h;
+      const scale = 0.6 + rock.depth * 1.4;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(rock.rotSeed + t * rock.rotSpeed);
+      ctx.scale(scale, scale);
+      ctx.globalAlpha = 0.18 + rock.depth * 0.22;
+      ctx.fillStyle = palette.accent;
+      ctx.beginPath();
+      rock.poly.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.35)";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+  } else if (kind === "nebula") {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const colors = palette.billboardColors;
+    for (const [i, b] of getAmbientNebulaBlobs(0x4e454255).entries()) {
+      const dx = Math.sin(t * 0.04 + b.seed) * w * 0.05;
+      const dy = Math.cos(t * 0.035 + b.seed * 1.3) * h * 0.04;
+      const x = b.x * w + dx,
+        y = b.y * h + dy,
+        r = b.r * Math.min(w, h);
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, hexToRgba(colors[i % colors.length], 0.22));
+      grad.addColorStop(1, hexToRgba(colors[i % colors.length], 0));
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  } else if (kind === "blackHole") {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const cx = w / 2,
+      cy = h * 0.4;
+    const R = Math.min(w, h) * 0.14;
+    const colors = palette.billboardColors;
+    for (let i = 0; i < 3; i++) {
+      const rr = R * (1.6 + i * 0.7);
+      const rot = t * (0.2 + i * 0.06) + i;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(rot);
+      ctx.globalAlpha = 0.3 - i * 0.06;
+      ctx.strokeStyle = colors[i % colors.length];
+      ctx.lineWidth = R * 0.14;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, rr, rr * 0.3, 0, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+    // heavier vignette pulling the whole viewport toward black -- the
+    // event horizon is always "just offscreen"
+    const vign = ctx.createRadialGradient(cx, cy, R * 2, cx, cy, Math.max(w, h) * 0.75);
+    vign.addColorStop(0, "rgba(0,0,0,0)");
+    vign.addColorStop(1, "rgba(0,0,0,0.55)");
+    ctx.fillStyle = vign;
+    ctx.fillRect(0, 0, w, h);
+  }
 }
 
 // ---------------------------------------------------------------- units

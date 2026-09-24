@@ -6,7 +6,7 @@
 // with a texture stuck to it. Every scene here is Canvas 2D primitives --
 // no images/video -- keeping the "fully offline, zero external assets" CSP
 // posture intact even for this screen.
-import { TAU, RNG, clamp } from "./utils.js";
+import { TAU, RNG, clamp, hexToRgba } from "./utils.js";
 
 export function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -113,14 +113,6 @@ function hashStr(s) {
     h = Math.imul(h, 16777619);
   }
   return h >>> 0;
-}
-
-function hexToRgba(hex, alpha) {
-  const n = parseInt(hex.slice(1), 16);
-  const r = (n >> 16) & 255,
-    g = (n >> 8) & 255,
-    b = n & 255;
-  return `rgba(${r},${g},${b},${alpha})`;
 }
 
 const starfieldCache = new Map();

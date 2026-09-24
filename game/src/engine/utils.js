@@ -10,6 +10,14 @@ export const dist = (ax, ay, bx, by) => Math.sqrt(dist2(ax, ay, bx, by));
 export const angleTo = (ax, ay, bx, by) => Math.atan2(by - ay, bx - ax);
 export const TAU = Math.PI * 2;
 
+export function hexToRgba(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255,
+    g = (n >> 8) & 255,
+    b = n & 255;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 // Deterministic PRNG (mulberry32) so daily-challenge seeds are reproducible
 // across machines/sessions without shipping a heavier RNG library.
 export class RNG {

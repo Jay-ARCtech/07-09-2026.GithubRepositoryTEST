@@ -1,4 +1,4 @@
-import { clamp, angleTo, dist, TAU, SpatialGrid, easeOutCubic } from "./engine/utils.js";
+import { clamp, angleTo, dist, TAU, SpatialGrid, easeOutCubic, hexToRgba } from "./engine/utils.js";
 import { Camera, setupCanvas, startLoop } from "./engine/core.js";
 import { audio } from "./engine/audio.js";
 import { ParticleSystem } from "./engine/particles.js";
@@ -27,6 +27,8 @@ import { updateWarDirector, startWarMode } from "./game/warmode.js";
 import {
   buildArenaScenery,
   drawArenaGround,
+  drawArenaAmbience,
+  drawGroundCraters,
   drawUnitShape,
   drawBossShape,
   drawAllyShape,
@@ -41,7 +43,7 @@ import { generateOptions } from "./game/levelup-options.js";
 import { ASCENSION_TIERS, canAscend, ascend } from "./game/ascension.js";
 import { PASSIVE_LIST } from "./game/passives.js";
 import { getDifficulty } from "./game/difficulty.js";
-import { getArenaPalette, DEFAULT_ARENA_PALETTE } from "./game/celestialBodies.js";
+import { getArenaPalette, getCelestialBody, DEFAULT_ARENA_PALETTE } from "./game/celestialBodies.js";
 
 import { setHudVisible, updateHud, showToast } from "./ui/hud.js";
 import {
@@ -275,6 +277,7 @@ function startRun(charId, { daily = false, war = false, empireCount = 4, difficu
   // whole arena to match (see scenery.js/renderWorld()) -- War Mode/Daily
   // never set a real difficultyId, so they fall back to today's palette.
   world.arenaPalette = getArenaPalette(world.difficultyId);
+  world.arenaBodyKind = getCelestialBody(world.difficultyId)?.kind || null;
   scenery = buildArenaScenery(world, world.difficultyDef.obstacleMult, world.arenaPalette);
   world._onEnemyDamaged = (e) => {
     particles.spawnBurst(e.x, e.y, "#ffffff", 3, { speed: 80, life: 0.2 });
@@ -900,6 +903,19 @@ function renderWorld() {
   const palette = world?.arenaPalette || DEFAULT_ARENA_PALETTE;
   ctx.fillStyle = palette.bg;
   ctx.fillRect(0, 0, w, h);
+  // A screen-space accent glow centered on the viewport, plus a per-body
+  // `kind` ambient layer (moon craters live in world space, drawn later;
+  // asteroid field / nebula / black hole are screen-space so they're always
+  // visible from the first frame, not just once the player wanders near
+  // world-space billboards). This is what actually makes a run on, say,
+  // Nebula read differently from one on Mercury at a glance -- the palette
+  // alone was too subtle against a near-black background to notice in play.
+  const glow = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.75);
+  glow.addColorStop(0, hexToRgba(palette.accent, 0.16));
+  glow.addColorStop(1, hexToRgba(palette.accent, 0));
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, w, h);
+  drawArenaAmbience(ctx, w, h, world?.time || 0, world?.arenaBodyKind || null, palette);
   if (!world || !player) return;
 
   const shake = camera.getShakeOffset();
@@ -937,6 +953,11 @@ function renderWorld() {
     ctx.lineTo(player.x + viewR, y);
     ctx.stroke();
   }
+
+  // Moon (Clone difficulty): cratered ground texture tied to world space
+  // via a deterministic cell hash, so it reads as real terrain the camera
+  // pans over instead of a fixed overlay.
+  if (world.arenaBodyKind === "moon") drawGroundCraters(ctx, player.x, player.y, world.seed || 0);
 
   // holographic billboards, boundary pylons, and distant city light glints --
   // turns the arena from a bare circle+grid into a rooftop/street battlefield.
@@ -1243,6 +1264,7 @@ startLoop((dt, now) => {
       mode: world?.mode,
       difficultyId: world?.difficultyId,
       arenaPalette: world?.arenaPalette,
+      arenaBodyKind: world?.arenaBodyKind,
       time: world?.time,
       enemyCount: world?.enemies?.length,
       enemyTypes: typeTally,

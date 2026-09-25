@@ -1,0 +1,50 @@
+{
+  "name": "nova-core-protocol",
+  "productName": "Nova Core Protocol",
+  "version": "1.0.0",
+  "description": "A bullet-heaven arena survival roguelite. Fully offline, zero external assets.",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "http-server -p 8080 -c-1 .",
+    "start": "electron .",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "build": "electron-builder -mwl"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "http-server": "^14.1.1"
+  },
+  "build": {
+    "appId": "com.novacore.protocol",
+    "productName": "Nova Core Protocol",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "index.html",
+      "style.css",
+      "src/**/*",
+      "electron/**/*",
+      "package.json",
+      "!**/*.map"
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "build/icon.png"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "build/icon.png",
+      "category": "public.app-category.action-games"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "icon": "build/icon.png",
+      "category": "Game"
+    }
+  }
+}
